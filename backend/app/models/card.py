@@ -2,14 +2,15 @@
 
 from enum import Enum
 from typing import Optional
-from .basic_classes import *
+from .utils import *
 
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
-RARITY_BUDGET = os.getenv("RARITY_BUDGET")
+RARITY_BUDGET: dict[str, int] = json.loads(os.getenv("RARITY_BUDGET", "{}"))
 
 
 class CardRarity(Enum):
@@ -29,11 +30,10 @@ class Card:
     name: str
     description: str
     rarity: CardRarity
-    cost: int
-    power_table: Power | tuple[int, int, int]
+    power_table: PowerTable | tuple[int, int, int]
 
     def __post_init__(self):
         if isinstance(self.power_table, tuple):
-            self.power_table = Power(*self.power_table)
+            self.power_table = PowerTable(*self.power_table)
 
         self.budget = RARITY_BUDGET.get(self.rarity.value, 0)

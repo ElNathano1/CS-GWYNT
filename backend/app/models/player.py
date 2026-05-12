@@ -2,6 +2,7 @@
 
 from typing import List
 from .card import Card
+from .utils import PowerTable
 
 
 class Player:
