@@ -1,8 +1,9 @@
 """Card Model"""
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
-from .utils import *
+from .utils import PowerTable
 
 import os
 from dotenv import load_dotenv

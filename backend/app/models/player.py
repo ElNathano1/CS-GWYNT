@@ -1,33 +1,59 @@
 """Player Model"""
 
+import random
+
+from dataclasses import dataclass
 from typing import List
 from .card import Card
-from .utils import PowerTable
+from .utils import Location
 
 
+@dataclass
 class Player:
     """Represents a player in the game"""
 
-    def __init__(self, id: int, username: str, deck: List[Card] = None):
-        self.id = id
-        self.username = username
-        self.hand: List[Card] = []
-        self.deck: List[Card] = deck or []
-        self.discard_pile: List[Card] = []
+    id: int
+    username: str
+    hand: List[Card] = []
+    deck: List[Card] = []
+    discard_pile: List[Card] = []
+
+    def __post_init__(self):
+        """Initialize the player's terrain and other attributes"""
+
+        self.terrain: dict[str, List[Card]] = {}
+        self._shuffle_deck()
+
+    def _shuffle_deck(self) -> None:
+        """Shuffle the player's deck"""
+
+        random.shuffle(self.deck)
 
     def draw_card(self) -> Card:
         """Draw a card from the deck"""
-        if self.deck:
-            return self.deck.pop(0)
-        return None
 
-    def play_card(self, card: Card) -> bool:
+        try:
+            return self.deck.pop(0)
+
+        except IndexError:
+            raise Exception("Deck is empty")
+
+    def play_card(self, card: Card, location: Location) -> None:
         """Play a card from the hand"""
-        if card in self.hand:
+
+        try:
+            self.hand.remove(card)
+            self.terrain[location.value].append(card)
+
+        except ValueError:
+            raise Exception("Card not in hand")
+
+    def discard_card(self, card: Card) -> None:
+        """Discard a card from the hand"""
+
+        try:
             self.hand.remove(card)
             self.discard_pile.append(card)
-            return True
-        return False
 
-    def __repr__(self) -> str:
-        return f"Player(id={self.id}, username='{self.username}', health={self.health})"
+        except ValueError:
+            raise Exception("Card not in hand")
