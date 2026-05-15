@@ -4,12 +4,13 @@ import statistics
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING
 import os
 from dotenv import load_dotenv
 import json
 
-from .card import Card
+if TYPE_CHECKING:
+    from .card import Card
 
 load_dotenv()
 
@@ -53,11 +54,5 @@ class PowerTable:
 
 class EffectType(str, Enum):
     """Types of card effects"""
-
-    pass
-
-
-class Effect:
-    """Represents a card effect"""
 
     pass

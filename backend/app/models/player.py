@@ -2,7 +2,7 @@
 
 import random
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 from .card import Card
 from .utils import Location
@@ -14,9 +14,9 @@ class Player:
 
     id: int
     username: str
-    hand: List[Card] = []
-    deck: List[Card] = []
-    discard_pile: List[Card] = []
+    hand: List[Card] = field(default_factory=list)
+    deck: List[Card] = field(default_factory=list)
+    discard_pile: List[Card] = field(default_factory=list)
 
     def __post_init__(self):
         """Initialize the player's terrain and other attributes"""

@@ -14,6 +14,19 @@ load_dotenv()
 RARITY_BUDGET: dict[str, int] = json.loads(os.getenv("RARITY_BUDGET", "{}"))
 
 
+class EffectType(str, Enum):
+    """Types of card effects"""
+
+    pass
+
+
+@dataclass
+class Effect:
+    """Represents a card effect"""
+
+    pass
+
+
 class CardRarity(Enum):
     """Card rarity levels"""
 
