@@ -3,9 +3,9 @@
 import random
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict
 from .card import Card
-from .utils import Location
+from .utils import Lane
 
 
 @dataclass
@@ -21,7 +21,7 @@ class Player:
     def __post_init__(self):
         """Initialize the player's terrain and other attributes"""
 
-        self.terrain: dict[str, List[Card]] = {}
+        self.terrain: Dict[str, List[Card]] = {}
         self._shuffle_deck()
 
     def _shuffle_deck(self) -> None:
@@ -38,12 +38,12 @@ class Player:
         except IndexError:
             raise Exception("Deck is empty")
 
-    def play_card(self, card: Card, location: Location) -> None:
+    def play_card(self, card: Card, lane: Lane) -> None:
         """Play a card from the hand"""
 
         try:
             self.hand.remove(card)
-            self.terrain[location.value].append(card)
+            self.terrain[lane.value].append(card)
 
         except ValueError:
             raise Exception("Card not in hand")

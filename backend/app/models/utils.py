@@ -4,8 +4,8 @@ import statistics
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 import os
+from typing import TYPE_CHECKING
 from dotenv import load_dotenv
 import json
 
@@ -26,11 +26,11 @@ def cost_function(card: "Card") -> int:
     sum = card.power_table.sum()  # type: ignore
     std = card.power_table.std()  # type: ignore
 
-    return max(0, round(sum - 9 * ((std / card.budget) ** 2)))
+    return max(0, round(sum - 9 * ((std / card.budget) ** 2) + card.effect.cost))
 
 
-class Location(Enum):
-    """Location where to place a card"""
+class Lane(Enum):
+    """Lane where to place a card"""
 
     FRONTSTAGE = "frontstage"
     OFFSTAGE = "offstage"
@@ -45,14 +45,15 @@ class PowerTable:
     offstage: int = 0
     backstage: int = 0
 
+    def __post_init__(self):
+        if not all(
+            isinstance(x, int) and x >= 0
+            for x in [self.frontstage, self.offstage, self.backstage]
+        ):
+            raise ValueError("Power values must be non-negative integers")
+
     def sum(self):
         return self.frontstage + self.offstage + self.backstage
 
     def std(self):
         return statistics.stdev([self.frontstage, self.offstage, self.backstage])
-
-
-class EffectType(str, Enum):
-    """Types of card effects"""
-
-    pass
