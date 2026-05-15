@@ -5,7 +5,6 @@ import random
 from dataclasses import dataclass, field
 from typing import List, Dict
 from .card import Card
-from .utils import Lane
 
 
 @dataclass
