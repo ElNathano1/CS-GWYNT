@@ -72,7 +72,7 @@ class User(Base):
         CheckConstraint("is_connected IN (0, 1)", name="ck_users_is_connected_bool"),
         CheckConstraint("in_game IN (0, 1)", name="ck_users_in_game_bool"),
         CheckConstraint("level >= 0", name="ck_users_level_non_negative"),
-        CheckConstraint("rank >= 0", name="ck_users_rank_non_negative"),
+        CheckConstraint("`rank` >= 0", name="ck_users_rank_non_negative"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
