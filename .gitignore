@@ -1,49 +1,28 @@
+# Thumbnails
+._*
+
+# Ignoring temporary or preferencies files
+*.prefs
+*.csgogame
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-env/
+*.pyo
+
+# Environments
+.venv/
 venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Environment
+env/
 .env
-.env.local
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# OS
+# OS/editor
 .DS_Store
 Thumbs.db
+.vscode/
+
+# Logs and saves
+saves/
+*.csgogame
+gtp_logs/
+*.log
