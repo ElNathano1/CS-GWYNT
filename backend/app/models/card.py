@@ -35,6 +35,9 @@ class Card:
     rarity: CardRarity
     power_table: PowerTable | Tuple[int, int, int]
 
+    face_artwork_url: Optional[str] = None
+    back_artwork_url: Optional[str] = None
+
     effect: Optional[Effect] = None  # type: ignore
 
     current_lane: Optional[LaneType] = None

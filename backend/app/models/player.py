@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass, field
 from typing import List, Dict
 from .card import Card
+from .lane import LaneType, Lane, Hand, Pile
 
 
 @dataclass
@@ -13,46 +14,76 @@ class Player:
 
     id: int
     username: str
-    hand: List[Card] = field(default_factory=list)
-    deck: List[Card] = field(default_factory=list)
-    discard_pile: List[Card] = field(default_factory=list)
+    display_name: str
+    profile_picture_url: str
+
+    deck: Pile
+
+    hand: Hand = Hand()
+    discard_pile: Pile = Pile()
+
+    board: Dict[str, Lane] = {
+        "frontstage": Lane(type=LaneType.FRONTSTAGE),
+        "offstage": Lane(type=LaneType.OFFSTAGE),
+        "backstage": Lane(type=LaneType.BACKSTAGE),
+    }
 
     def __post_init__(self):
         """Initialize the player's terrain and other attributes"""
 
-        self.terrain: Dict[str, List[Card]] = {}
-        self._shuffle_deck()
+        self.deck.shuffle()
 
-    def _shuffle_deck(self) -> None:
-        """Shuffle the player's deck"""
+    def update_power(self) -> None:
+        """Update the current power of all cards on the board"""
 
-        random.shuffle(self.deck)
+        for lane in self.board.values():
+            lane.update_power()
 
-    def draw_card(self) -> Card:
+        self.current_power = sum(lane.current_power for lane in self.board.values())
+
+    def draw_card(self) -> None:
         """Draw a card from the deck"""
 
         try:
-            return self.deck.pop(0)
+            card = self.deck.draw()
+            self.hand.append(card)
 
-        except IndexError:
-            raise Exception("Deck is empty")
+        except Exception as e:
+            raise e
 
-    def play_card(self, card: Card, lane: Lane) -> None:
+    def play_card(self, card: Card, lane: LaneType) -> None:
         """Play a card from the hand"""
 
         try:
             self.hand.remove(card)
-            self.terrain[lane.value].append(card)
+            self.board[lane.value].append(card)
 
-        except ValueError:
-            raise Exception("Card not in hand")
+            self.update_power()
+
+        except Exception as e:
+            raise e
 
     def discard_card(self, card: Card) -> None:
-        """Discard a card from the hand"""
+        """Discard a card from the hand, deck or board"""
 
         try:
             self.hand.remove(card)
-            self.discard_pile.append(card)
 
         except ValueError:
-            raise Exception("Card not in hand")
+            try:
+                self.deck.remove(card)
+
+            except ValueError:
+                for lane in self.board.values():
+                    try:
+                        lane.remove(card)
+                        self.update_power()
+                        break
+
+                    except ValueError:
+                        continue
+
+                else:
+                    raise Exception("Card not found in hand, deck or board")
+
+        self.discard_pile.append(card)

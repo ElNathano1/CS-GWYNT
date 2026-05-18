@@ -366,7 +366,9 @@ class Trigger:
         if event != self.event:
             return
 
-        if not self.is_active and not self.deactivate_condition(event, player, card, game):
+        if not self.is_active and not self.deactivate_condition(
+            event, player, card, game
+        ):
             if self.activate_condition(event, player, card, game):
                 self.is_active = True
                 self.activated_on = game.current_turn
@@ -451,7 +453,9 @@ class Trigger:
                 self.current_countdown -= 1
             return False
 
-        if self.current_repeats > 0 and not self.repeat_condition(event, player, card, game):
+        if self.current_repeats > 0 and not self.repeat_condition(
+            event, player, card, game
+        ):
             return False
 
         if not self.trigger_condition(event, player, card, game):
@@ -475,7 +479,7 @@ class Effect:
     """Represents a card effect."""
 
     description: str
-    effet_type: EffectType
+    effect_type: EffectType
     target_type: (
         Target
         | MoveTarget
@@ -527,12 +531,6 @@ class Effect:
         self._validate_effect_shape()
 
     @property
-    def effect_type(self) -> EffectType:
-        """Correctly spelled alias for effet_type."""
-
-        return self.effet_type
-
-    @property
     def cost(self) -> int:
         """Calculate the cost of the effect based on its type and value."""
 
@@ -560,7 +558,7 @@ class Effect:
                     "Move, Swap, or Copy target must be a tuple of two target values"
                 )
 
-            match self.effet_type:
+            match self.effect_type:
                 case EffectType.MOVE | EffectType.SUMMON:
                     source = _coerce_single_target(raw_target[0])
                     destination = _coerce_single_target(raw_target[1])
@@ -586,7 +584,7 @@ class Effect:
             return _coerce_single_target(raw_target)
 
     def _validate_effect_shape(self) -> None:
-        if self.effet_type in {
+        if self.effect_type in {
             EffectType.BUFF,
             EffectType.MULTIPLY_POWER,
             EffectType.SET_POWER,
@@ -598,7 +596,7 @@ class Effect:
             if self.target.target_type != TargetType.CARD:
                 raise ValueError("Power effects must target cards")
 
-        elif self.effet_type in {
+        elif self.effect_type in {
             EffectType.DESTROY,
             EffectType.SHIELD,
             EffectType.IMMUNITY,
@@ -613,7 +611,7 @@ class Effect:
             if isinstance(self.target, (MoveTarget, SwapTarget, CopyTarget)):
                 raise ValueError("These effects require a single target")
 
-        elif self.effet_type in {
+        elif self.effect_type in {
             EffectType.LOCK_POSITION,
             EffectType.UNLOCK_POSITION,
         }:
@@ -626,7 +624,7 @@ class Effect:
             if self.target.target_type != TargetType.POSITION:
                 raise ValueError("Lock/unlock effects must target positions")
 
-        elif self.effet_type in {EffectType.MOVE, EffectType.SUMMON}:
+        elif self.effect_type in {EffectType.MOVE, EffectType.SUMMON}:
             if self.value:
                 raise ValueError("Value cannot be provided for move or summon effects")
             if not isinstance(self.target, MoveTarget):
@@ -634,7 +632,7 @@ class Effect:
                     "Move or summon effects require a source and destination target"
                 )
 
-        elif self.effet_type in {
+        elif self.effect_type in {
             EffectType.SWAP_POWER,
             EffectType.SWAP_POSITION,
             EffectType.TRANSFORM,
@@ -648,11 +646,11 @@ class Effect:
                     "Swap or transform effects require two targets to swap or transform between"
                 )
 
-        elif self.effet_type == EffectType.COPY:
+        elif self.effect_type == EffectType.COPY:
             if self.value:
                 raise ValueError("Value cannot be provided for copy effects")
             if not isinstance(self.target, CopyTarget):
                 raise ValueError("Copy effects require a source and destination target")
 
         else:
-            raise ValueError(f"Unknown effect type: {self.effet_type}")
+            raise ValueError(f"Unknown effect type: {self.effect_type}")
