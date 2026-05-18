@@ -1,8 +1,8 @@
 """Effect model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Optional
+from typing import Optional
 
 from .card import Card
 from .game import Game
@@ -316,156 +316,344 @@ class Event(str, Enum):
     ON_TURN_END = "on_turn_end"
 
 
+class ConditionOperator(str, Enum):
+    """Operators used by declarative trigger conditions."""
+
+    EQ = "eq"
+    NE = "ne"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    IN = "in"
+    NIN = "nin"
+
+
+class ConditionLogic(str, Enum):
+    """How to combine multiple conditions."""
+
+    ALL = "all"
+    ANY = "any"
+
+
+ConditionValue = int | float | str | bool
+
+
+@dataclass(frozen=True)
+class Condition:
+    """Declarative condition usable for activation/deactivation/trigger checks."""
+
+    field_name: str
+    operator: ConditionOperator
+    value: ConditionValue | list[ConditionValue]
+
+    def evaluate(
+        self, metrics: dict[str, ConditionValue | list[ConditionValue]]
+    ) -> bool:
+        left = metrics.get(self.field_name)
+        right = self.value
+
+        if self.operator == ConditionOperator.EQ:
+            return left == right
+        if self.operator == ConditionOperator.NE:
+            return left != right
+        if left is None:
+            return False
+        if self.operator == ConditionOperator.GT:
+            return left > right  # type: ignore[operator]
+        if self.operator == ConditionOperator.GTE:
+            return left >= right  # type: ignore[operator]
+        if self.operator == ConditionOperator.LT:
+            return left < right  # type: ignore[operator]
+        if self.operator == ConditionOperator.LTE:
+            return left <= right  # type: ignore[operator]
+        if self.operator == ConditionOperator.IN:
+            if not isinstance(right, list):
+                raise ValueError("IN operator requires list value")
+            return left in right
+        if self.operator == ConditionOperator.NIN:
+            if not isinstance(right, list):
+                raise ValueError("NIN operator requires list value")
+            return left not in right
+        raise ValueError(f"Unsupported condition operator: {self.operator}")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "field_name": self.field_name,
+            "operator": self.operator.value,
+            "value": self.value,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "Condition":
+        return cls(
+            field_name=str(data["field_name"]),
+            operator=ConditionOperator(str(data["operator"])),
+            value=data.get("value"),  # type: ignore[arg-type]
+        )
+
+
+@dataclass(frozen=True)
+class ConditionSet:
+    """A list of declarative conditions with ALL/ANY logic."""
+
+    logic: ConditionLogic = ConditionLogic.ALL
+    conditions: list[Condition] = field(default_factory=list)
+
+    def evaluate(
+        self, metrics: dict[str, ConditionValue | list[ConditionValue]]
+    ) -> bool:
+        if not self.conditions:
+            return True
+        if self.logic == ConditionLogic.ALL:
+            return all(condition.evaluate(metrics) for condition in self.conditions)
+        return any(condition.evaluate(metrics) for condition in self.conditions)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "logic": self.logic.value,
+            "conditions": [condition.to_dict() for condition in self.conditions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "ConditionSet":
+        raw_conditions = data.get("conditions", [])
+        if not isinstance(raw_conditions, list):
+            raise ValueError("conditions must be a list")
+        return cls(
+            logic=ConditionLogic(str(data.get("logic", ConditionLogic.ALL.value))),
+            conditions=[
+                Condition.from_dict(item)
+                for item in raw_conditions
+                if isinstance(item, dict)
+            ],
+        )
+
+
 @dataclass
 class Trigger:
-    """Represents a trigger for a card effect."""
+    """Declarative trigger state machine, serializable for database storage."""
 
     event: Event
-    activate_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    deactivate_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: False
-    )
-    trigger_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
+    activate_when: Optional[ConditionSet] = None
+    deactivate_when: Optional[ConditionSet] = None
+    fire_when: Optional[ConditionSet] = None
     countdown: int = 0
-    countdowm_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    repeat: Optional[int] = None
-    repeat_interval: Optional[int] = None
-    repeat_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
+    repeat_limit: Optional[int] = None
+    repeat_interval: int = 0
     initially_active: bool = True
 
     def __post_init__(self) -> None:
         if self.countdown < 0:
             raise ValueError("Countdown cannot be negative")
-        if self.repeat and self.repeat <= 0:
+        if self.repeat_limit and self.repeat_limit <= 0:
             raise ValueError("Repeat count must be positive or None")
-        if self.repeat_interval and self.repeat_interval <= 0:
-            raise ValueError("Repeat interval must be positive or None")
+        if self.repeat_interval < 0:
+            raise ValueError("Repeat interval must be non-negative")
 
-        self.current_countdown = self.countdown
-        self.current_repeat_cooldown = 0
-        self.current_repeats = 0
-        self.is_active = self.initially_active
-        self.activated_on: Optional[int] = None
-        if self.initially_active:
-            self.activated_on = 0
-        self.last_repeat_on: Optional[int] = None
-
-    def start_countdown(
-        self, event: Event, player: "Player", card: "Card", game: "Game"
-    ) -> None:
-        """Legacy helper: arm the initial countdown if trigger can become active."""
-
-        if event != self.event:
-            return
-
-        if not self.is_active and not self.deactivate_condition(
-            event, player, card, game
-        ):
-            if self.activate_condition(event, player, card, game):
-                self.is_active = True
-                self.activated_on = game.current_turn
-                self.current_countdown = self.countdown
-
-    def update_countdown(
-        self, event: Event, player: "Player", card: "Card", game: "Game"
-    ) -> None:
-        """Legacy helper: step countdown/cooldown on matching events."""
-
-        if event != self.event or not self.is_active:
-            return
-
-        if self.current_repeat_cooldown > 0:
-            if self.countdowm_condition(event, player, card, game):
-                self.current_repeat_cooldown -= 1
-            return
-
-        if self.current_countdown > 0 and self.countdowm_condition(
-            event, player, card, game
-        ):
-            self.current_countdown -= 1
+        self._remaining_countdown = self.countdown
+        self._remaining_cooldown = 0
+        self._trigger_count = 0
+        self._is_active = self.initially_active
+        self._activated_on_turn: Optional[int] = None
+        self._last_trigger_turn: Optional[int] = None
 
     def reset(self) -> None:
         """Reset the trigger state."""
 
-        self.is_active = self.initially_active
-        self.activated_on = None
-        if self.initially_active:
-            self.activated_on = 0
-        self.current_countdown = self.countdown
-        self.current_repeat_cooldown = 0
-        self.current_repeats = 0
-        self.last_repeat_on = None
+        self._remaining_countdown = self.countdown
+        self._remaining_cooldown = 0
+        self._trigger_count = 0
+        self._is_active = self.initially_active
+        self._activated_on_turn = None
+        self._last_trigger_turn = None
 
-    @property
-    def countdown_condition(self) -> Callable[[Event, "Player", "Card", "Game"], bool]:
-        """Alias with corrected spelling for compatibility."""
+    def to_dict(self, include_runtime_state: bool = False) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "event": self.event.value,
+            "activate_when": (
+                self.activate_when.to_dict() if self.activate_when else None
+            ),
+            "deactivate_when": (
+                self.deactivate_when.to_dict() if self.deactivate_when else None
+            ),
+            "fire_when": self.fire_when.to_dict() if self.fire_when else None,
+            "countdown": self.countdown,
+            "repeat_limit": self.repeat_limit,
+            "repeat_interval": self.repeat_interval,
+            "initially_active": self.initially_active,
+        }
+        if include_runtime_state:
+            payload["runtime_state"] = {
+                "remaining_countdown": self._remaining_countdown,
+                "remaining_cooldown": self._remaining_cooldown,
+                "trigger_count": self._trigger_count,
+                "is_active": self._is_active,
+                "activated_on_turn": self._activated_on_turn,
+                "last_trigger_turn": self._last_trigger_turn,
+            }
+        return payload
 
-        return self.countdowm_condition
+    @staticmethod
+    def _safe_int(value: object, default: int = 0) -> int:
+        if isinstance(value, (int, float, str, bool)):
+            return int(value)
+        return default
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "Trigger":
+        activate_payload = data.get("activate_when")
+        deactivate_payload = data.get("deactivate_when")
+        fire_payload = data.get("fire_when")
+        repeat_limit_raw = data.get("repeat_limit")
+
+        trigger = cls(
+            event=Event(str(data["event"])),
+            activate_when=(
+                ConditionSet.from_dict(activate_payload)
+                if isinstance(activate_payload, dict)
+                else None
+            ),
+            deactivate_when=(
+                ConditionSet.from_dict(deactivate_payload)
+                if isinstance(deactivate_payload, dict)
+                else None
+            ),
+            fire_when=(
+                ConditionSet.from_dict(fire_payload)
+                if isinstance(fire_payload, dict)
+                else None
+            ),
+            countdown=Trigger._safe_int(data.get("countdown", 0)),
+            repeat_limit=(
+                Trigger._safe_int(repeat_limit_raw)
+                if repeat_limit_raw is not None
+                else None
+            ),
+            repeat_interval=Trigger._safe_int(data.get("repeat_interval", 0)),
+            initially_active=bool(data.get("initially_active", True)),
+        )
+
+        runtime_state = data.get("runtime_state")
+        if isinstance(runtime_state, dict):
+            trigger._remaining_countdown = int(
+                runtime_state.get("remaining_countdown", trigger.countdown)
+            )
+            trigger._remaining_cooldown = int(
+                runtime_state.get("remaining_cooldown", 0)
+            )
+            trigger._trigger_count = int(runtime_state.get("trigger_count", 0))
+            trigger._is_active = bool(
+                runtime_state.get("is_active", trigger.initially_active)
+            )
+            trigger._activated_on_turn = (
+                int(runtime_state["activated_on_turn"])
+                if runtime_state.get("activated_on_turn") is not None
+                else None
+            )
+            trigger._last_trigger_turn = (
+                int(runtime_state["last_trigger_turn"])
+                if runtime_state.get("last_trigger_turn") is not None
+                else None
+            )
+
+        return trigger
+
+    def _build_metrics(
+        self,
+        player: "Player",
+        card: "Card",
+        game: "Game",
+        extra_metrics: Optional[dict[str, ConditionValue | list[ConditionValue]]],
+    ) -> dict[str, ConditionValue | list[ConditionValue]]:
+        metrics: dict[str, ConditionValue | list[ConditionValue]] = {
+            "current_turn": int(getattr(game, "current_turn", 0)),
+        }
+
+        player_board = getattr(player, "board", None)
+        if player_board is not None and hasattr(player_board, "cards"):
+            player_cards = player_board.cards()  # type: ignore[operator]
+            if isinstance(player_cards, list):
+                metrics["player_board_count"] = len(player_cards)
+
+        game_board = getattr(game, "board", None)
+        if game_board is not None and hasattr(game_board, "cards"):
+            game_cards = game_board.cards()  # type: ignore[operator]
+            if isinstance(game_cards, list):
+                metrics["board_count"] = len(game_cards)
+
+        hand = getattr(player, "hand", None)
+        if isinstance(hand, list):
+            metrics["player_hand_count"] = len(hand)
+
+        deck = getattr(player, "deck", None)
+        if isinstance(deck, list):
+            metrics["player_deck_count"] = len(deck)
+
+        discard = getattr(player, "discard", None)
+        if isinstance(discard, list):
+            metrics["player_discard_count"] = len(discard)
+
+        if extra_metrics:
+            metrics.update(extra_metrics)
+
+        return metrics
 
     def should_trigger(
-        self, event: Event, player: "Player", card: "Card", game: "Game"
+        self,
+        event: Event,
+        player: "Player",
+        card: "Card",
+        game: "Game",
+        extra_metrics: Optional[
+            dict[str, ConditionValue | list[ConditionValue]]
+        ] = None,
     ) -> bool:
-        """Check whether this trigger should fire now.
-
-        This separates two concepts:
-        - active state (effect is on/off), controlled by activate/deactivate conditions
-        - fire condition (effect triggers now), controlled by trigger_condition
-        """
+        """Check whether this trigger should fire now."""
 
         if event != self.event:
             return False
 
-        if self.is_active:
-            if self.deactivate_condition(event, player, card, game):
-                self.is_active = False
-                self.activated_on = None
-                self.current_countdown = self.countdown
-                self.current_repeat_cooldown = 0
+        metrics = self._build_metrics(player, card, game, extra_metrics)
+
+        if self._is_active:
+            if self.deactivate_when and self.deactivate_when.evaluate(metrics):
+                self._is_active = False
+                self._activated_on_turn = None
+                self._remaining_countdown = self.countdown
+                self._remaining_cooldown = 0
                 return False
-        elif not self.deactivate_condition(event, player, card, game):
-            if self.activate_condition(event, player, card, game):
-                self.is_active = True
-                self.activated_on = game.current_turn
-                self.current_countdown = self.countdown
-                self.current_repeat_cooldown = 0
+        else:
+            if self.deactivate_when and self.deactivate_when.evaluate(metrics):
+                return False
+            if self.activate_when is None or self.activate_when.evaluate(metrics):
+                self._is_active = True
+                self._activated_on_turn = int(getattr(game, "current_turn", 0))
+                self._remaining_countdown = self.countdown
+                self._remaining_cooldown = 0
 
-        if not self.is_active:
+        if not self._is_active:
             return False
 
-        if self.repeat and self.current_repeats >= self.repeat:
+        if self.repeat_limit and self._trigger_count >= self.repeat_limit:
             return False
 
-        if self.current_repeat_cooldown > 0:
-            if self.countdowm_condition(event, player, card, game):
-                self.current_repeat_cooldown -= 1
+        if self._remaining_cooldown > 0:
+            self._remaining_cooldown -= 1
             return False
 
-        if self.current_countdown > 0:
-            if self.countdowm_condition(event, player, card, game):
-                self.current_countdown -= 1
+        if self._remaining_countdown > 0:
+            self._remaining_countdown -= 1
             return False
 
-        if self.current_repeats > 0 and not self.repeat_condition(
-            event, player, card, game
-        ):
+        if self.fire_when and not self.fire_when.evaluate(metrics):
             return False
 
-        if not self.trigger_condition(event, player, card, game):
-            return False
-
-        self.current_repeats += 1
-        self.last_repeat_on = game.current_turn
+        self._trigger_count += 1
+        self._last_trigger_turn = int(getattr(game, "current_turn", 0))
 
         if self.repeat_interval:
-            self.current_repeat_cooldown = self.repeat_interval
+            self._remaining_cooldown = self.repeat_interval
 
         return True
 
@@ -490,45 +678,42 @@ class Effect:
         | tuple[Target | Targets | str, Target | Targets | str]
     )
 
-    trigger_on_event: Event
-    trigger_activate_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    trigger_deactivate_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: False
-    )
-    trigger_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    trigger_countdown: int = 0
-    trigger_countdowm_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    trigger_repeat: Optional[int] = None
-    trigger_repeat_interval: Optional[int] = None
-    trigger_repeat_condition: Callable[[Event, "Player", "Card", "Game"], bool] = (
-        lambda event, player, card, game: True
-    )
-    trigger_initially_active: bool = True
+    trigger: Trigger
 
     value: Optional[int | PowerTable] = None
 
     def __post_init__(self) -> None:
-        self.trigger = Trigger(
-            event=self.trigger_on_event,
-            activate_condition=self.trigger_activate_condition,
-            deactivate_condition=self.trigger_deactivate_condition,
-            trigger_condition=self.trigger_condition,
-            countdown=self.trigger_countdown,
-            countdowm_condition=self.trigger_countdowm_condition,
-            repeat=self.trigger_repeat,
-            repeat_interval=self.trigger_repeat_interval,
-            repeat_condition=self.trigger_repeat_condition,
-            initially_active=self.trigger_initially_active,
-        )
-
         self.target = self._normalize_target(self.target_type)
         self._validate_effect_shape()
+
+    def to_dict(self, include_trigger_runtime_state: bool = False) -> dict[str, object]:
+        return {
+            "description": self.description,
+            "effect_type": self.effect_type.value,
+            "target": _serialize_effect_target(self.target),
+            "trigger": self.trigger.to_dict(
+                include_runtime_state=include_trigger_runtime_state
+            ),
+            "value": _serialize_effect_value(self.value),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "Effect":
+        raw_target = data.get("target")
+        if not isinstance(raw_target, dict):
+            raise ValueError("Effect target payload must be a dict")
+
+        raw_trigger = data.get("trigger")
+        if not isinstance(raw_trigger, dict):
+            raise ValueError("Effect trigger payload must be a dict")
+
+        return cls(
+            description=str(data.get("description", "")),
+            effect_type=EffectType(str(data["effect_type"])),
+            target_type=_deserialize_effect_target(raw_target),
+            trigger=Trigger.from_dict(raw_trigger),
+            value=_deserialize_effect_value(data.get("value")),
+        )
 
     @property
     def cost(self) -> int:
@@ -654,3 +839,95 @@ class Effect:
 
         else:
             raise ValueError(f"Unknown effect type: {self.effect_type}")
+
+
+def _serialize_effect_target(
+    target: Target | MoveTarget | SwapTarget | CopyTarget,
+) -> dict[str, object]:
+    if isinstance(target, Target):
+        return {
+            "shape": "single",
+            "selector": target.selector.value,
+        }
+    if isinstance(target, MoveTarget):
+        return {
+            "shape": "move",
+            "source": target.source.selector.value,
+            "destination": target.destination.selector.value,
+        }
+    if isinstance(target, SwapTarget):
+        return {
+            "shape": "swap",
+            "first": target.first.selector.value,
+            "second": target.second.selector.value,
+        }
+    if isinstance(target, CopyTarget):
+        return {
+            "shape": "copy",
+            "source": target.source.selector.value,
+            "destination": target.destination.selector.value,
+        }
+    raise TypeError(f"Unsupported target type for serialization: {type(target)}")
+
+
+def _deserialize_effect_target(
+    data: dict[str, object],
+) -> Target | MoveTarget | SwapTarget | CopyTarget:
+    shape = str(data.get("shape", "single"))
+
+    if shape == "single":
+        return Target.from_value(str(data["selector"]))
+    if shape == "move":
+        return MoveTarget(
+            source=Target.from_value(str(data["source"])),
+            destination=Target.from_value(str(data["destination"])),
+        )
+    if shape == "swap":
+        return SwapTarget(
+            first=Target.from_value(str(data["first"])),
+            second=Target.from_value(str(data["second"])),
+        )
+    if shape == "copy":
+        return CopyTarget(
+            source=Target.from_value(str(data["source"])),
+            destination=Target.from_value(str(data["destination"])),
+        )
+    raise ValueError(f"Unknown target serialization shape: {shape}")
+
+
+def _serialize_effect_value(
+    value: Optional[int | PowerTable],
+) -> Optional[dict[str, object]]:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return {
+            "type": "int",
+            "value": value,
+        }
+    if isinstance(value, PowerTable):
+        return {
+            "type": "power_table",
+            "frontstage": value.frontstage,
+            "offstage": value.offstage,
+            "backstage": value.backstage,
+        }
+    raise TypeError(f"Unsupported effect value type: {type(value)}")
+
+
+def _deserialize_effect_value(data: object) -> Optional[int | PowerTable]:
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise ValueError("Effect value payload must be a dict or None")
+
+    value_type = str(data.get("type", ""))
+    if value_type == "int":
+        return int(data["value"])
+    if value_type == "power_table":
+        return PowerTable(
+            frontstage=int(data.get("frontstage", 0)),
+            offstage=int(data.get("offstage", 0)),
+            backstage=int(data.get("backstage", 0)),
+        )
+    raise ValueError(f"Unknown effect value type: {value_type}")

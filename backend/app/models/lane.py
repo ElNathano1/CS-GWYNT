@@ -172,12 +172,7 @@ class Pile(List[Card]):
                     "backstage": card.power_table.backstage,  # type: ignore
                 },
                 "effect": (
-                    {
-                        "description": card.effect.description,
-                        "type": card.effect.effect_type,
-                        "trigger_on_event": card.effect.trigger_on_event,
-                        "value": card.effect.value,
-                    }
+                    card.effect.to_dict()
                     if card.effect
                     else None
                 ),

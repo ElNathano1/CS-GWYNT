@@ -25,8 +25,8 @@ Cards have the following attributes:
 
 ### Deck
 
-- Maximum deck size: 40 cards
-- Minimum deck size: 25 cards
+- Maximum deck size: 30 cards
+- Minimum deck size: 15 cards
 - Players draw from their deck each turn
 
 ### Turn Structure
