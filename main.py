@@ -1,5 +1,5 @@
 """
-CS-GO User Service (Railway branch)
+CS-GWYNT User Service (Railway branch)
 
 This FastAPI service provides:
 - Account management APIs (users, friends, levels, connection state)
@@ -63,7 +63,7 @@ import asyncio
 import json
 import uuid
 
-app = FastAPI(title="CS-GO User Service")
+app = FastAPI(title="CS-GWYNT User Service")
 
 # JWT Secret - use environment variable in production
 JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key-change-in-production")
