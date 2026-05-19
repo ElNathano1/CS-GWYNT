@@ -75,11 +75,13 @@ class EffectRepository:
             id=effect.id,  # type: ignore
             description=effect.description,  # type: ignore
             type=effect.type,  # type: ignore
+            artwork=cast(str | None, effect.artwork),
             target_shape=target_shape,
             target_payload=target_payload,
             trigger=trigger_dto,
             value=simple_value,
             value_data=complex_value,
+            animations=cast(dict | None, effect.get_animations()),
         )
 
     def _apply_trigger_dto(self, orm: Trigger, dto: TriggerDTO) -> None:
@@ -212,10 +214,12 @@ class EffectRepository:
         orm = Effect(
             description=dto.description,
             type=dto.type,
+            artwork=dto.artwork,
             trigger_id=trigger_orm.id if trigger_orm else None,
         )
         orm.set_target(dto.target_payload)
         orm.set_value_data(dto.value_data if dto.value_data is not None else dto.value)
+        orm.set_animations(dto.animations)
         self.session.add(orm)
         self.session.commit()
         self.session.refresh(orm)
@@ -277,8 +281,10 @@ class EffectRepository:
 
         orm.description = dto.description  # type: ignore
         orm.type = dto.type  # type: ignore
+        orm.artwork = dto.artwork  # type: ignore
         orm.set_target(dto.target_payload)
         orm.set_value_data(dto.value_data if dto.value_data is not None else dto.value)
+        orm.set_animations(dto.animations)
 
         if dto.trigger is not None:
             if orm.trigger:  # type: ignore

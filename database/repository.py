@@ -64,11 +64,14 @@ class AccountRepository:
                     power_table=c.card.power_table,
                     face_artwork_url=_cast(str | None, c.card.face_artwork_url),
                     back_artwork_url=_cast(str | None, c.card.back_artwork_url),
+                    animations=_cast(dict | None, c.card.get_animations()),
                     effect=(
                         effect_repo._orm_effect_to_dto(c.card.effect)
                         if c.card.effect
                         else None
                     ),
+                    buying_price=c.card.buying_price,
+                    selling_price=c.card.selling_price,
                 ),
                 "quantity": c.quantity,
             }
@@ -1038,6 +1041,8 @@ class AccountRepository:
                 description=c.loot_box.description,
                 price=c.loot_box.price,
                 nbr_random_cards=c.loot_box.nbr_random_cards,
+                artwork=c.loot_box.artwork,
+                animations=c.loot_box.get_animations(),
                 mandatory_cards=[
                     (
                         _CardDTO(
@@ -1048,6 +1053,7 @@ class AccountRepository:
                             power_table=mc.card.power_table,
                             face_artwork_url=mc.card.face_artwork_url,
                             back_artwork_url=mc.card.back_artwork_url,
+                            animations=_cast(dict | None, mc.card.get_animations()),
                             effect=effect_repo._orm_effect_to_dto(mc.card.effect),
                             buying_price=mc.card.buying_price,
                             selling_price=mc.card.selling_price,
@@ -1066,6 +1072,7 @@ class AccountRepository:
                             power_table=rc.card.power_table,
                             face_artwork_url=rc.card.face_artwork_url,
                             back_artwork_url=rc.card.back_artwork_url,
+                            animations=_cast(dict | None, rc.card.get_animations()),
                             effect=effect_repo._orm_effect_to_dto(rc.card.effect),
                             buying_price=rc.card.buying_price,
                             selling_price=rc.card.selling_price,

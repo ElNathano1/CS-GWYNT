@@ -622,6 +622,7 @@ class Card(Base):
     power_table = Column(Text, nullable=False)
     face_artwork_url = Column(String(255), nullable=True)
     back_artwork_url = Column(String(255), nullable=True)
+    animations = Column(Text, nullable=True)
     effect_id = Column(Integer, ForeignKey("effects.id"), nullable=True)
     buying_price = Column(Integer, nullable=False, default=0)
     selling_price = Column(Integer, nullable=False, default=0)
@@ -637,6 +638,22 @@ class Card(Base):
 
     def __repr__(self) -> str:
         return f"Card(id={self.id}, name={self.name}, description={self.description}, rarity={self.rarity}, power_table={self.power_table}, effect={{{self.effect.__repr__() if self.effect else 'None'}}}, buying_price={self.buying_price}, selling_price={self.selling_price})"
+
+    def set_animations(self, animations: dict[str, object] | None) -> None:
+        """Persist card animations payload as JSON text."""
+
+        self.animations = json.dumps(animations) if animations is not None else None
+
+    def get_animations(self) -> dict[str, object] | None:
+        """Rebuild card animations payload from JSON text."""
+
+        payload = cast(str | None, self.animations)
+        if payload is None:
+            return None
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return None
 
 
 class CardsCorrespondancy(Base):
@@ -688,8 +705,10 @@ class Effect(Base):
     id = Column(Integer, primary_key=True, index=True)
     description = Column(Text, nullable=False)
     type = Column(String(20), nullable=False)
+    artwork = Column(String(255), nullable=True)
     target_shape = Column(String(20), nullable=True)
     target_payload = Column(Text, nullable=True)
+    animations = Column(Text, nullable=True)
     trigger_id = Column(Integer, ForeignKey("triggers.id"), nullable=False)
     value = Column(Integer, nullable=True)
     value_json = Column(Text, nullable=True)
@@ -702,6 +721,11 @@ class Effect(Base):
 
     def __repr__(self) -> str:
         return f"Effect(id={self.id}, description={self.description}, type={self.type}, trigger={self.trigger.__repr__() if self.trigger else 'None'}, value={self.value}, value_json={self.value_json})"
+
+    def set_artwork(self, artwork: str | None) -> None:
+        """Persist effect artwork path."""
+
+        self.artwork = artwork
 
     def set_target(self, target: dict[str, object] | None) -> None:
         """Persist effect target payload in normalized columns."""
@@ -752,6 +776,22 @@ class Effect(Base):
             return None
         value_int = cast(int | None, self.value)
         return value_int
+
+    def set_animations(self, animations: dict[str, object] | None) -> None:
+        """Persist effect animations payload as JSON text."""
+
+        self.animations = json.dumps(animations) if animations is not None else None
+
+    def get_animations(self) -> dict[str, object] | None:
+        """Rebuild effect animations payload from JSON text."""
+
+        payload = cast(str | None, self.animations)
+        if payload is None:
+            return None
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return None
 
 
 class Trigger(Base):
@@ -883,6 +923,8 @@ class LootBox(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=False)
     price = Column(Integer, nullable=False, default=0)
+    artwork = Column(String(255), nullable=True)
+    animations = Column(Text, nullable=True)
     nbr_random_cards = Column(Integer, nullable=False, default=0)
 
     # Relations
@@ -908,6 +950,22 @@ class LootBox(Base):
 
     def __repr__(self) -> str:
         return f"LootBox(id={self.id}, name={self.name}, description={self.description}, price={self.price})"
+
+    def set_animations(self, animations: dict[str, object] | None) -> None:
+        """Persist loot box animations payload as JSON text."""
+
+        self.animations = json.dumps(animations) if animations is not None else None
+
+    def get_animations(self) -> dict[str, object] | None:
+        """Rebuild loot box animations payload from JSON text."""
+
+        payload = cast(str | None, self.animations)
+        if payload is None:
+            return None
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return data
+        return None
 
 
 class LootBoxMandatoryCards(Base):
@@ -1256,71 +1314,131 @@ def ensure_schema() -> None:
     # Ensure all declared tables exist (safe: creates only missing tables)
     Base.metadata.create_all(bind=engine)
 
-    inspector = inspect(engine)
-    if not inspector.has_table("users"):
-        return
+    def add_missing_columns(table_name: str, columns_sql: dict[str, str]) -> None:
+        inspector = inspect(engine)
+        if not inspector.has_table(table_name):
+            return
 
-    columns = {column["name"] for column in inspector.get_columns("users")}
-    if "in_game" in columns:
-        pass
-
-    else:
-        with engine.begin() as connection:
-            connection.execute(
-                text("ALTER TABLE users ADD COLUMN in_game INTEGER NOT NULL DEFAULT 0")
-            )
-
-    if inspector.has_table("messages"):
-        message_columns = {
-            column["name"] for column in inspector.get_columns("messages")
+        existing_columns = {
+            column["name"] for column in inspector.get_columns(table_name)
         }
-        if "type" not in message_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "ALTER TABLE messages ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'message'"
-                    )
-                )
+        missing_columns = [
+            (column_name, sql_def)
+            for column_name, sql_def in columns_sql.items()
+            if column_name not in existing_columns
+        ]
+        if not missing_columns:
+            return
 
-    if inspector.has_table("cards"):
-        card_columns = {column["name"] for column in inspector.get_columns("cards")}
         with engine.begin() as connection:
-            if "face_artwork_url" not in card_columns:
+            for column_name, sql_def in missing_columns:
                 connection.execute(
-                    text("ALTER TABLE cards ADD COLUMN face_artwork_url VARCHAR(255)")
-                )
-            if "back_artwork_url" not in card_columns:
-                connection.execute(
-                    text("ALTER TABLE cards ADD COLUMN back_artwork_url VARCHAR(255)")
+                    text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_def}")
                 )
 
-    if inspector.has_table("effects"):
-        effect_columns = {column["name"] for column in inspector.get_columns("effects")}
-        with engine.begin() as connection:
-            if "target_shape" not in effect_columns:
-                connection.execute(
-                    text("ALTER TABLE effects ADD COLUMN target_shape VARCHAR(20)")
-                )
-            if "target_payload" not in effect_columns:
-                connection.execute(
-                    text("ALTER TABLE effects ADD COLUMN target_payload TEXT")
-                )
-            if "value_json" not in effect_columns:
-                connection.execute(
-                    text("ALTER TABLE effects ADD COLUMN value_json TEXT")
-                )
+    add_missing_columns(
+        "users",
+        {
+            "is_connected": "INTEGER NOT NULL DEFAULT 0",
+            "in_game": "INTEGER NOT NULL DEFAULT 0",
+            "level": "INTEGER NOT NULL DEFAULT 0",
+            "rank": "INTEGER NOT NULL DEFAULT 0",
+            "money": "INTEGER NOT NULL DEFAULT 0",
+        },
+    )
 
-    if inspector.has_table("achievements"):
-        achievement_columns = {
-            column["name"] for column in inspector.get_columns("achievements")
-        }
-        if "illustration" not in achievement_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "ALTER TABLE achievements ADD COLUMN illustration VARCHAR(255)"
-                    )
-                )
+    add_missing_columns(
+        "messages",
+        {
+            "type": "VARCHAR(20) NOT NULL DEFAULT 'message'",
+        },
+    )
+
+    add_missing_columns(
+        "games",
+        {
+            "finished": "INTEGER NOT NULL DEFAULT 0",
+            "replay_data": "TEXT",
+        },
+    )
+
+    add_missing_columns(
+        "cards",
+        {
+            "face_artwork_url": "VARCHAR(255)",
+            "back_artwork_url": "VARCHAR(255)",
+            "animations": "TEXT",
+            "buying_price": "INTEGER NOT NULL DEFAULT 0",
+            "selling_price": "INTEGER NOT NULL DEFAULT 0",
+        },
+    )
+
+    add_missing_columns(
+        "effects",
+        {
+            "artwork": "VARCHAR(255)",
+            "target_shape": "VARCHAR(20)",
+            "target_payload": "TEXT",
+            "animations": "TEXT",
+            "value_json": "TEXT",
+        },
+    )
+
+    add_missing_columns(
+        "triggers",
+        {
+            "event": "VARCHAR(20) NOT NULL DEFAULT 'on_play'",
+            "activate_on_logic": "VARCHAR(20)",
+            "activate_on_conditions": "TEXT",
+            "deactivate_on_logic": "VARCHAR(20)",
+            "deactivate_on_conditions": "TEXT",
+            "fire_when_logic": "VARCHAR(20)",
+            "fire_when_conditions": "TEXT",
+            "countdown": "INTEGER NOT NULL DEFAULT 0",
+            "repeat_limit": "INTEGER",
+            "repeat_interval": "INTEGER NOT NULL DEFAULT 0",
+            "initially_active": "INTEGER NOT NULL DEFAULT 1",
+        },
+    )
+
+    add_missing_columns(
+        "loot_boxes",
+        {
+            "price": "INTEGER NOT NULL DEFAULT 0",
+            "artwork": "VARCHAR(255)",
+            "animations": "TEXT",
+            "nbr_random_cards": "INTEGER NOT NULL DEFAULT 0",
+        },
+    )
+
+    add_missing_columns(
+        "loot_box_mandatory_cards",
+        {
+            "quantity": "INTEGER NOT NULL DEFAULT 1",
+        },
+    )
+
+    add_missing_columns(
+        "loot_box_random_cards",
+        {
+            "count": "INTEGER NOT NULL DEFAULT 0",
+            "probability": "FLOAT NOT NULL DEFAULT 0.0",
+        },
+    )
+
+    add_missing_columns(
+        "user_loot_box_correspondancy",
+        {
+            "quantity": "INTEGER NOT NULL DEFAULT 1",
+        },
+    )
+
+    add_missing_columns(
+        "achievements",
+        {
+            "illustration": "VARCHAR(255)",
+        },
+    )
 
 
 def get_session() -> Session:
@@ -1333,5 +1451,4 @@ def get_session() -> Session:
     return Session(engine)
 
 
-init_db()
 ensure_schema()

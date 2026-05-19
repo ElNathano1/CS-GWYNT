@@ -98,6 +98,8 @@ class LootBoxRepository:
             description=orm.description,  # type: ignore
             price=orm.price,  # type: ignore
             nbr_random_cards=orm.nbr_random_cards,  # type: ignore
+            artwork=orm.artwork,  # type: ignore
+            animations=orm.get_animations(),  # type: ignore
             mandatory_cards=mandatory_cards,  # type: ignore
             random_cards=random_cards,  # type: ignore
         )
@@ -122,7 +124,9 @@ class LootBoxRepository:
             description=dto.description,
             price=dto.price,
             nbr_random_cards=dto.nbr_random_cards,
+            artwork=dto.artwork,
         )
+        orm.set_animations(dto.animations)
         self.session.add(orm)
         self.session.flush()
 
@@ -367,6 +371,8 @@ class LootBoxRepository:
         orm.description = dto.description  # type: ignore
         orm.price = dto.price  # type: ignore
         orm.nbr_random_cards = dto.nbr_random_cards  # type: ignore
+        orm.artwork = dto.artwork  # type: ignore
+        orm.set_animations(dto.animations)
 
         # Note: Updating cards is not handled here. Use add/remove_mandatory_card and add/remove_random_card for that.
 

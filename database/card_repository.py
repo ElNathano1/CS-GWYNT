@@ -48,7 +48,10 @@ class CardRepository:
             power_table=orm.power_table,  # type: ignore
             face_artwork_url=cast(str | None, orm.face_artwork_url),
             back_artwork_url=cast(str | None, orm.back_artwork_url),
+            animations=cast(dict | None, orm.get_animations()),
             effect=effect_dto,
+            buying_price=orm.buying_price,  # type: ignore
+            selling_price=orm.selling_price,  # type: ignore
         )
 
     # CRUD
@@ -82,6 +85,7 @@ class CardRepository:
             buying_price=dto.buying_price,
             selling_price=dto.selling_price,
         )
+        orm.set_animations(dto.animations)
         self.session.add(orm)
         self.session.commit()
         self.session.refresh(orm)
@@ -165,6 +169,7 @@ class CardRepository:
         orm.power_table = dto.power_table  # type: ignore
         orm.face_artwork_url = dto.face_artwork_url  # type: ignore
         orm.back_artwork_url = dto.back_artwork_url  # type: ignore
+        orm.set_animations(dto.animations)
         orm.buying_price = dto.buying_price  # type: ignore
         orm.selling_price = dto.selling_price  # type: ignore
         # Attach a new effect if one is provided and none currently exists

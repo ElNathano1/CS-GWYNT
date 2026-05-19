@@ -38,6 +38,7 @@ class CardDTO:
         id: int | None = None,
         face_artwork_url: str | None = None,
         back_artwork_url: str | None = None,
+        animations: dict | None = None,
         effect: EffectDTO | None = None,
         buying_price: int = 0,
         selling_price: int = 0,
@@ -49,6 +50,7 @@ class CardDTO:
         self.power_table = power_table
         self.face_artwork_url = face_artwork_url
         self.back_artwork_url = back_artwork_url
+        self.animations = animations
         self.effect = effect
         self.buying_price = buying_price
         self.selling_price = selling_price
@@ -66,6 +68,7 @@ class CardDTO:
             "power_table": self.power_table,
             "face_artwork_url": self.face_artwork_url,
             "back_artwork_url": self.back_artwork_url,
+            "animations": self.animations,
             "effect": self.effect.to_dict() if self.effect else None,
             "buying_price": self.buying_price,
             "selling_price": self.selling_price,

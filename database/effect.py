@@ -130,20 +130,24 @@ class EffectDTO:
         description: str,
         type: str,
         id: int | None = None,
+        artwork: str | None = None,
         target_shape: str | None = None,
         target_payload: dict | None = None,
         trigger: TriggerDTO | None = None,
         value: int | None = None,
         value_data: dict | None = None,
+        animations: dict | None = None,
     ):
         self.id = id
         self.description = description
         self.type = type
+        self.artwork = artwork
         self.target_shape = target_shape
         self.target_payload = target_payload
         self.trigger = trigger
         self.value = value
         self.value_data = value_data
+        self.animations = animations
 
     def __repr__(self) -> str:
         return (
@@ -157,6 +161,7 @@ class EffectDTO:
             "id": self.id,
             "description": self.description,
             "type": self.type,
+            "artwork": self.artwork,
             "target": (
                 {"shape": self.target_shape, **self.target_payload}
                 if self.target_payload is not None
@@ -164,4 +169,5 @@ class EffectDTO:
             ),
             "trigger": self.trigger.to_dict() if self.trigger else None,
             "value": self.value if self.value_data is None else self.value_data,
+            "animations": self.animations,
         }

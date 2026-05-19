@@ -32,17 +32,21 @@ class LootBoxDTO:
         description: str,
         price: int,
         nbr_random_cards: int,
-        mandatory_cards: list[tuple[CardDTO, int]],
-        random_cards: list[tuple[CardDTO, float]],
+        artwork: str | None = None,
+        animations: dict | None = None,
+        mandatory_cards: list[tuple[CardDTO, int]] | None = None,
+        random_cards: list[tuple[CardDTO, float]] | None = None,
         id: int | None = None,
     ):
         self.id = id
         self.name = name
         self.description = description
         self.price = price
+        self.artwork = artwork
+        self.animations = animations
         self.nbr_random_cards = nbr_random_cards
-        self.mandatory_cards = mandatory_cards
-        self.random_cards = random_cards
+        self.mandatory_cards = mandatory_cards or []
+        self.random_cards = random_cards or []
 
     def __repr__(self) -> str:
         return f"LootBoxDTO(id={self.id}, name={self.name!r}, price={self.price!r})"
@@ -54,6 +58,8 @@ class LootBoxDTO:
             "name": self.name,
             "description": self.description,
             "price": self.price,
+            "artwork": self.artwork,
+            "animations": self.animations,
             "nbr_random_cards": self.nbr_random_cards,
             "mandatory_cards": [
                 {"card": card.to_dict(), "quantity": quantity}

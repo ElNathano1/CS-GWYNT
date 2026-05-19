@@ -203,6 +203,8 @@ class EffectPayload(BaseModel):
     target: dict | None = None
     trigger: TriggerPayload | None = None
     value: int | dict | None = None
+    artwork: str | None = None
+    animations: dict | None = None
 
 
 class CardCreate(BaseModel):
@@ -213,6 +215,7 @@ class CardCreate(BaseModel):
     face_artwork_url: str | None = None
     back_artwork_url: str | None = None
     effect: EffectPayload | None = None
+    animations: dict | None = None
 
 
 class UserCardAction(BaseModel):
@@ -233,6 +236,8 @@ class LootBoxCreate(BaseModel):
     nbr_random_cards: int
     mandatory_cards: list[tuple[int, int]] = Field(default_factory=list)
     random_cards: list[tuple[int, float]] = Field(default_factory=list)
+    artwork: str | None = None
+    animations: dict | None = None
 
 
 class LootBoxMandatoryCardAction(BaseModel):
@@ -354,6 +359,8 @@ def _effect_payload_to_dto(payload: EffectPayload) -> EffectDTO:
         ),
         value=value_number,
         value_data=value_data,
+        artwork=payload.artwork,
+        animations=payload.animations,
     )
 
 
@@ -840,6 +847,8 @@ def create_loot_box(
             description=payload.description,
             price=payload.price,
             nbr_random_cards=payload.nbr_random_cards,
+            artwork=payload.artwork,
+            animations=payload.animations,
             mandatory_cards=mandatory_cards,
             random_cards=random_cards,
         )
@@ -1101,6 +1110,7 @@ def create_card(
             power_table=payload.power_table,
             face_artwork_url=payload.face_artwork_url,
             back_artwork_url=payload.back_artwork_url,
+            animations=payload.animations,
             effect=effect_dto,
         )
     )

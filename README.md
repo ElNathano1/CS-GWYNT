@@ -638,7 +638,241 @@ Success output:
 }
 ```
 
-### 7. Cards
+### 7. Loot Boxes
+
+Loot box media fields:
+
+- `artwork`: string or `null`, path or URL to the loot box artwork
+- `animations`: object or `null`, JSON-compatible dictionary serialized in database as text
+
+#### `GET /loot-boxes`
+
+List all loot boxes.
+
+Optional query params:
+
+- `search: string`
+
+Output item format:
+
+```json
+{
+  "id": 1,
+  "name": "Starter Pack",
+  "description": "Guaranteed basics plus one random card",
+  "price": 100,
+  "nbr_random_cards": 1,
+  "artwork": "assets/lootboxes/starter.webp",
+  "animations": {
+    "open": "assets/lootboxes/starter-open.json"
+  },
+  "mandatory_cards": [
+    {
+      "card": {
+        "id": 10,
+        "name": "Infantry",
+        "description": "Basic unit",
+        "rarity": "common",
+        "power_table": "[3]",
+        "face_artwork_url": "assets/cards/infantry-front.webp",
+        "back_artwork_url": "assets/cards/default-back.webp",
+        "animations": {
+          "deploy": "assets/cards/infantry-deploy.json"
+        },
+        "effect": null,
+        "buying_price": 10,
+        "selling_price": 5
+      },
+      "quantity": 2
+    }
+  ],
+  "random_cards": [
+    {
+      "card": {
+        "id": 11,
+        "name": "Archer",
+        "description": "Ranged unit",
+        "rarity": "common",
+        "power_table": "[4]",
+        "face_artwork_url": "assets/cards/archer-front.webp",
+        "back_artwork_url": "assets/cards/default-back.webp",
+        "animations": null,
+        "effect": null,
+        "buying_price": 12,
+        "selling_price": 6
+      },
+      "probability": 0.5
+    }
+  ]
+}
+```
+
+#### `GET /loot-boxes/{loot_box_id}`
+
+Get one loot box by id.
+
+#### `POST /loot-boxes`
+
+Create a loot box.
+
+Input (JSON body):
+
+```json
+{
+  "name": "Starter Pack",
+  "description": "Guaranteed basics plus one random card",
+  "price": 100,
+  "nbr_random_cards": 1,
+  "artwork": "assets/lootboxes/starter.webp",
+  "animations": {
+    "open": "assets/lootboxes/starter-open.json"
+  },
+  "mandatory_cards": [
+    [10, 2],
+    [12, 1]
+  ],
+  "random_cards": [
+    [11, 0.5],
+    [13, 0.5]
+  ]
+}
+```
+
+Notes:
+
+- `mandatory_cards` uses `[card_id, quantity]`
+- `random_cards` uses `[card_id, probability]`
+
+#### `DELETE /loot-boxes/{loot_box_id}`
+
+Delete a loot box by id.
+
+#### `POST /loot-boxes/{loot_box_id}/mandatory-cards/{card_id}`
+
+Add or increment a guaranteed card in a loot box.
+
+Input (JSON body):
+
+```json
+{
+  "quantity": 2
+}
+```
+
+#### `DELETE /loot-boxes/{loot_box_id}/mandatory-cards/{card_id}?quantity=1`
+
+Remove copies of a guaranteed card from a loot box.
+
+#### `POST /loot-boxes/{loot_box_id}/random-cards/{card_id}`
+
+Add or replace a random card probability in a loot box.
+
+Input (JSON body):
+
+```json
+{
+  "probability": 0.35
+}
+```
+
+#### `DELETE /loot-boxes/{loot_box_id}/random-cards/{card_id}`
+
+Remove a random card from a loot box.
+
+#### `GET /users/{username}/loot-boxes`
+
+Get one user's loot box inventory.
+
+Success output:
+
+```json
+[
+  {
+    "loot_box": {
+      "id": 1,
+      "name": "Starter Pack",
+      "description": "Guaranteed basics plus one random card",
+      "price": 100,
+      "nbr_random_cards": 1,
+      "artwork": "assets/lootboxes/starter.webp",
+      "animations": {
+        "open": "assets/lootboxes/starter-open.json"
+      },
+      "mandatory_cards": [],
+      "random_cards": []
+    },
+    "quantity": 3
+  }
+]
+```
+
+#### `POST /users/{username}/loot-boxes/{loot_box_id}`
+
+Add loot boxes to a user's inventory.
+
+Input (JSON body):
+
+```json
+{
+  "quantity": 2
+}
+```
+
+#### `DELETE /users/{username}/loot-boxes/{loot_box_id}?quantity=1`
+
+Remove loot boxes from a user's inventory.
+
+#### `POST /users/{username}/loot-boxes/{loot_box_id}/buy`
+
+Buy loot boxes using the user's in-game money.
+
+Input (JSON body):
+
+```json
+{
+  "quantity": 1
+}
+```
+
+#### `POST /users/{username}/loot-boxes/{loot_box_id}/open`
+
+Open one owned loot box and grant the resulting cards.
+
+Success output:
+
+```json
+{
+  "status": "success",
+  "username": "alice",
+  "loot_box_id": 1,
+  "remaining_quantity": 2,
+  "obtained_cards": [
+    {
+      "id": 10,
+      "name": "Infantry",
+      "description": "Basic unit",
+      "rarity": "common",
+      "power_table": "[3]",
+      "face_artwork_url": "assets/cards/infantry-front.webp",
+      "back_artwork_url": "assets/cards/default-back.webp",
+      "animations": {
+        "deploy": "assets/cards/infantry-deploy.json"
+      },
+      "effect": null,
+      "buying_price": 10,
+      "selling_price": 5
+    }
+  ]
+}
+```
+
+### 8. Cards
+
+Card media fields:
+
+- `face_artwork_url`: string or `null`, path or URL for the front artwork
+- `back_artwork_url`: string or `null`, path or URL for the back artwork
+- `animations`: object or `null`, JSON-compatible dictionary serialized in database as text
 
 #### `GET /cards`
 
@@ -661,8 +895,11 @@ Input (JSON body):
   "description": "Legendary witcher",
   "rarity": "legendary",
   "power_table": "[15]",
-  "face_artwork_url": "https://example.com/geralt-front.webp",
-  "back_artwork_url": "https://example.com/geralt-back.webp",
+  "face_artwork_url": "assets/cards/geralt-front.webp",
+  "back_artwork_url": "assets/cards/geralt-back.webp",
+  "animations": {
+    "deploy": "assets/cards/geralt-deploy.json"
+  },
   "effect": null
 }
 ```
@@ -691,7 +928,12 @@ Input (JSON body):
 
 Remove copies of a card from a user's collection.
 
-### 8. Effects
+### 9. Effects
+
+Effect media fields:
+
+- `artwork`: string or `null`, path or URL to the effect artwork
+- `animations`: object or `null`, JSON-compatible dictionary serialized in database as text
 
 #### `GET /effects`
 
@@ -711,6 +953,7 @@ Input (JSON body):
 {
   "description": "Boost allies on the same row",
   "type": "boost",
+  "artwork": "assets/effects/boost.webp",
   "target": {
     "shape": "row",
     "row": "melee"
@@ -725,7 +968,10 @@ Input (JSON body):
     "repeat_interval": 0,
     "initially_active": 1
   },
-  "value": 2
+  "value": 2,
+  "animations": {
+    "cast": "assets/effects/boost-cast.json"
+  }
 }
 ```
 
@@ -733,7 +979,7 @@ Input (JSON body):
 
 Delete an effect by id.
 
-### 9. Achievements
+### 10. Achievements
 
 #### `GET /achievements`
 
@@ -770,7 +1016,7 @@ Unlock an achievement for a user.
 
 Remove an unlocked achievement from a user.
 
-### 10. File Upload and Profile Pictures
+### 11. File Upload and Profile Pictures
 
 #### `POST /upload/`
 
@@ -836,7 +1082,7 @@ Success output:
 }
 ```
 
-### 11. File Manager (`UPLOAD_DIR` scoped)
+### 12. File Manager (`UPLOAD_DIR` scoped)
 
 All paths are validated to remain inside `UPLOAD_DIR`.
 
