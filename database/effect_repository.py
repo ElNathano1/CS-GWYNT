@@ -27,7 +27,7 @@ class EffectRepository:
         """
         self.session = session
 
-    # ─────────────────────────── internal helpers ────────────────────────────
+    # Internal helpers
 
     def _orm_trigger_to_dto(self, trigger: Trigger) -> TriggerDTO:
         """Convert a Trigger ORM object to a TriggerDTO."""
@@ -90,7 +90,9 @@ class EffectRepository:
         orm.repeat_interval = dto.repeat_interval  # type: ignore
         orm.initially_active = dto.initially_active  # type: ignore
 
-        def _encode(logic: str | None, conditions: list[dict] | None) -> tuple[str | None, str | None]:
+        def _encode(
+            logic: str | None, conditions: list[dict] | None
+        ) -> tuple[str | None, str | None]:
             return logic, (json.dumps(conditions) if conditions is not None else None)
 
         al, ac = _encode(dto.activate_on_logic, dto.activate_on_conditions)
@@ -104,7 +106,7 @@ class EffectRepository:
         orm.fire_when_logic = fl  # type: ignore
         orm.fire_when_conditions = fc  # type: ignore
 
-    # ──────────────────────────── trigger CRUD ──────────────────────────────
+    # Trigger CRUD
 
     def create_trigger(self, dto: TriggerDTO) -> TriggerDTO:
         """
@@ -187,7 +189,7 @@ class EffectRepository:
         self.session.commit()
         return True
 
-    # ──────────────────────────── effect CRUD ───────────────────────────────
+    # Effect CRUD
 
     def create_effect(self, dto: EffectDTO) -> EffectDTO:
         """

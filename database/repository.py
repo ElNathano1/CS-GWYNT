@@ -18,6 +18,7 @@ from database.account import Account
 from database.achievement import AchievementDTO as _AchDTO
 from database.card import CardDTO as _CardDTO
 from database.effect_repository import EffectRepository
+from database.loot_box_repository import LootBoxRepository
 from database.models import (
     Achievement,
     AchievementsCorrespondancy,
@@ -25,8 +26,10 @@ from database.models import (
     CardsCorrespondancy,
     Friendship,
     Game,
+    LootBox,
     Message,
     User,
+    UserLootBoxCorrespondancy,
 )
 from typing import cast as _cast
 
@@ -251,6 +254,19 @@ class AccountRepository:
         user = self.session.query(User).filter_by(username=username).first()
         if user:
             user.rank = new_rank  # type: ignore
+            self.session.commit()
+
+    def update_money(self, username: str, new_money: int) -> None:
+        """
+        Update a user's in-game currency balance.
+
+        Args:
+            username: The username of the account
+            new_money: The new money balance (>= 0)
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        if user:
+            user.money = new_money  # type: ignore
             self.session.commit()
 
     # connection status
@@ -804,6 +820,53 @@ class AccountRepository:
             correspondance.quantity -= quantity  # type: ignore
         self.session.commit()
 
+    def buy_card(self, username: str, card_id: int, quantity: int) -> bool:
+        """
+        Purchase a card for a user if they have enough money.
+
+        Args:
+            username: The username of the account
+            card_id: The ID of the card to buy
+            quantity: The number of copies to buy
+
+        Returns:
+            True if the purchase was successful, False if insufficient funds
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        card = self.session.query(Card).filter_by(id=card_id).first()
+        if not user or not card:
+            return False
+        if user.money < quantity * card.buying_price:  # type: ignore
+            return False
+        user.money -= quantity * card.buying_price  # type: ignore
+        self.add_card(username, card_id, quantity=quantity)
+        self.session.commit()
+        return True
+
+    def sell_card(self, username: str, card_id: int, quantity: int) -> bool:
+        """
+        Sell a card from a user's collection for a specified price.
+
+        Args:
+            username: The username of the account
+            card_id: The ID of the card to sell
+            quantity: The number of copies to sell
+
+        Returns:
+            True if the sale was successful, False if the user does not own the card
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        card = self.session.query(Card).filter_by(id=card_id).first()
+        if not user or not card:
+            return False
+        try:
+            self.remove_card(username, card_id, quantity=quantity)
+        except ValueError:
+            return False
+        user.money += quantity * card.selling_price  # type: ignore
+        self.session.commit()
+        return True
+
     def get_user_cards(self, username: str) -> list[dict]:
         """
         Retrieve a user's card collection with quantities.
@@ -824,7 +887,6 @@ class AccountRepository:
         effect_repo = EffectRepository(self.session)
         results = []
         for c in user.cards:  # type: ignore
-            from database.card import CardDTO as _CardDTO
             from typing import cast as _cast
 
             effect_dto = (
@@ -863,6 +925,215 @@ class AccountRepository:
             .first()
         )
         return correspondance.quantity if correspondance else 0  # type: ignore
+
+    # loot boxes
+
+    def add_loot_box(self, username: str, loot_box_id: int, quantity: int = 1) -> None:
+        """
+        Add loot boxes to the system (for admin use).
+
+        Args:
+            loot_box_id: The ID of the loot box type to add
+            quantity: Number of loot boxes to add (default 1)
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        loot_box = self.session.query(LootBox).filter_by(id=loot_box_id).first()
+        if not user or not loot_box:
+            return
+        correspondance = (
+            self.session.query(UserLootBoxCorrespondancy)
+            .filter_by(user_id=user.id, loot_box_id=loot_box.id)
+            .first()
+        )
+        if correspondance:
+            correspondance.quantity += quantity  # type: ignore
+        else:
+            self.session.add(
+                UserLootBoxCorrespondancy(
+                    user_id=user.id, loot_box_id=loot_box.id, quantity=quantity
+                )
+            )
+        self.session.commit()
+
+    def buy_loot_box(self, username: str, loot_box_id: int, quantity: int = 1) -> bool:
+        """
+        Allow a user to purchase loot boxes if they have enough money.
+
+        Args:
+            username: The username of the account
+            loot_box_id: The ID of the loot box type to buy
+            quantity: Number of loot boxes to buy (default 1)
+
+        Returns:
+            True if the purchase was successful, False if insufficient funds or loot box not found
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        loot_box = self.session.query(LootBox).filter_by(id=loot_box_id).first()
+        if not user or not loot_box:
+            return False
+        total_price = quantity * loot_box.price  # type: ignore
+        if user.money < total_price:  # type: ignore
+            return False
+        user.money -= total_price  # type: ignore
+        self.add_loot_box(username, loot_box_id, quantity=quantity)
+        self.session.commit()
+        return True
+
+    def remove_loot_box(
+        self, username: str, loot_box_id: int, quantity: int = 1
+    ) -> None:
+        """
+        Remove loot boxes from the system (for admin use).
+
+        Args:
+            username: The username of the account
+            loot_box_id: The ID of the loot box type to remove
+            quantity: Number of loot boxes to remove (default 1)
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        loot_box = self.session.query(LootBox).filter_by(id=loot_box_id).first()
+        if not user or not loot_box:
+            return
+        correspondance = (
+            self.session.query(UserLootBoxCorrespondancy)
+            .filter_by(user_id=user.id, loot_box_id=loot_box.id)
+            .first()
+        )
+        if not correspondance:
+            raise ValueError("Loot box not found in user's collection")
+        if correspondance.quantity < quantity:  # type: ignore
+            raise ValueError("Cannot remove more loot boxes than owned")
+        if correspondance.quantity == quantity:  # type: ignore
+            self.session.delete(correspondance)
+        else:
+            correspondance.quantity -= quantity  # type: ignore
+        self.session.commit()
+
+    def get_user_loot_boxes(self, username: str) -> list[dict]:
+        """
+        Retrieve a user's loot box collection with quantities.
+
+        Each entry is a dict with keys:
+          - loot_box: LootBoxDTO (full loot box data)
+          - quantity: int
+
+        Args:
+            username: The username of the account
+
+        Returns:
+            List of dicts {"loot_box": LootBoxDTO, "quantity": int}
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        if not user:
+            return []
+        results = []
+        for c in user.loot_boxes:  # type: ignore
+            from database.loot_box import LootBoxDTO as _LootBoxDTO
+
+            effect_repo = EffectRepository(self.session)
+
+            loot_box_dto = _LootBoxDTO(
+                id=c.loot_box.id,
+                name=c.loot_box.name,
+                description=c.loot_box.description,
+                price=c.loot_box.price,
+                nbr_random_cards=c.loot_box.nbr_random_cards,
+                mandatory_cards=[
+                    (
+                        _CardDTO(
+                            id=mc.card_id,
+                            name=mc.card.name,
+                            description=mc.card.description,
+                            rarity=mc.card.rarity,
+                            power_table=mc.card.power_table,
+                            face_artwork_url=mc.card.face_artwork_url,
+                            back_artwork_url=mc.card.back_artwork_url,
+                            effect=effect_repo._orm_effect_to_dto(mc.card.effect),
+                            buying_price=mc.card.buying_price,
+                            selling_price=mc.card.selling_price,
+                        ),
+                        mc.quantity,
+                    )
+                    for mc in c.loot_box.mandatory_cards  # type: ignore
+                ],
+                random_cards=[
+                    (
+                        _CardDTO(
+                            id=rc.card_id,
+                            name=rc.card.name,
+                            description=rc.card.description,
+                            rarity=rc.card.rarity,
+                            power_table=rc.card.power_table,
+                            face_artwork_url=rc.card.face_artwork_url,
+                            back_artwork_url=rc.card.back_artwork_url,
+                            effect=effect_repo._orm_effect_to_dto(rc.card.effect),
+                            buying_price=rc.card.buying_price,
+                            selling_price=rc.card.selling_price,
+                        ),
+                        rc.probability,
+                    )
+                    for rc in c.loot_box.random_cards  # type: ignore
+                ],
+            )
+            results.append({"loot_box": loot_box_dto, "quantity": c.quantity})
+        return results
+
+    def get_loot_box_quantity(self, username: str, loot_box_id: int) -> int:
+        """
+        Get the quantity of a specific loot box owned by a user.
+
+        Args:
+            username: The username of the account
+            loot_box_id: The ID of the loot box
+
+        Returns:
+            Number of copies owned (0 if not owned)
+        """
+        user = self.session.query(User).filter_by(username=username).first()
+        if not user:
+            return 0
+        correspondance = (
+            self.session.query(UserLootBoxCorrespondancy)
+            .filter_by(user_id=user.id, loot_box_id=loot_box_id)
+            .first()
+        )
+        return correspondance.quantity if correspondance else 0  # type: ignore
+
+    def open_loot_box(self, username: str, loot_box_id: int) -> list[_CardDTO]:
+        """
+        Open a loot box for a user, granting them the contained cards.
+
+        Args:
+            username: The username of the account
+            loot_box_id: The ID of the loot box to open
+
+        Returns:
+            List of CardDTO objects representing the cards obtained from the loot box
+        """
+
+        user = self.session.query(User).filter_by(username=username).first()
+        loot_box = self.session.query(LootBox).filter_by(id=loot_box_id).first()
+        if not user or not loot_box:
+            return []
+        correspondance = (
+            self.session.query(UserLootBoxCorrespondancy)
+            .filter_by(user_id=user.id, loot_box_id=loot_box.id)
+            .first()
+        )
+        if not correspondance or correspondance.quantity <= 0:  # type: ignore
+            return []
+
+        # Decrease loot box quantity
+        self.remove_loot_box(username, loot_box_id, quantity=1)
+        self.session.commit()
+
+        loot_box_repo = LootBoxRepository(self.session)
+        obtained_cards = loot_box_repo.open_loot_box(loot_box_id)
+        if not obtained_cards:
+            return []
+        for card in obtained_cards:
+            self.add_card(username, card.id, quantity=1)  # type: ignore
+        return obtained_cards
 
     # achievements
 

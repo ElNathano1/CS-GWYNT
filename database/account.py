@@ -18,6 +18,7 @@ class Account:
         display_name (str): The display name of the account holder.
         level (int): The skill level of the account holder.
         rank (int): The matchmaking rank of the account holder.
+        money (int): The in-game currency balance of the account holder.
         profile_picture (str | None): The path to the profile picture of the account holder.
 
         friends (list[str]): The card collection as [{card_id, name, rarity, quantity}].
@@ -33,6 +34,7 @@ class Account:
         display_name: str = "",
         level: int = 0,
         rank: int = 0,
+        money: int = 0,
         profile_picture: str = "default",
         friends: list[str] | None = None,
         is_connected: int = 0,
@@ -51,6 +53,7 @@ class Account:
             display_name (str): The display name of the account holder.
             level (int): The skill level of the account holder. Defaults to 0.
             rank (int): The matchmaking rank of the account holder. Defaults to 0.
+            money (int): The in-game currency balance of the account holder. Defaults to 0.
             profile_picture (str): The path to the profile picture directory of the account holder. Defaults to "default".
             friends (list[str]): The list of usernames of friends. Defaults to empty list.
             nbr_games (int): Total number of games played. Defaults to 0.
@@ -64,6 +67,7 @@ class Account:
         self.display_name = display_name
         self.level = level
         self.rank = rank
+        self.money = money
         self.profile_picture = profile_picture
         self.friends = friends or []
         self.is_connected = is_connected
@@ -74,7 +78,7 @@ class Account:
         self.achievements = achievements or []
 
     def __str__(self) -> str:
-        return f"Account: {self.username} - {self.display_name} (Level {self.level})"
+        return f"Account: {self.username} - {self.display_name} (Level {self.level} ; Rank {self.rank})"
 
     def to_dict(self) -> dict:
         """
@@ -88,6 +92,7 @@ class Account:
             "display_name": self.display_name,
             "level": self.level,
             "rank": self.rank,
+            "money": self.money,
             "profile_picture": self.profile_picture,
             "friends": self.friends,
             "is_connected": self.is_connected,

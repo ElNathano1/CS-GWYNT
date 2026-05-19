@@ -1,14 +1,20 @@
 """
-Database models and ORM configuration for the CS-GO user service.
+Database models and ORM configuration for the CS-GWYNT backend services.
 
 This module provides:
-- SQLAlchemy ORM models (User, Friendship)
+- SQLAlchemy ORM models (User, Card, Friendship, Game, Message)
 - Database engine initialization
 - Password hashing utilities
 - Session management
 
 Models:
 - User: Represents a player account with profile, level, and friends
+- Card: Represents a card in the game with attributes and effects
+- CardsCorrespondancy: Represents the many-to-many relationship between users and cards (card ownership)
+- Effect: Represents an effect that can be applied by a card
+- Trigger: Represents a trigger that can activate an effect based on game events
+- Achievement: Represents an achievement that can be unlocked by users
+- AchievementsCorrespondancy: Represents the many-to-many relationship between users and achievements (achievement ownership
 - Friendship: Represents a directional friendship relationship between users
 - Game: Represents a game record between two users
 - Message: Represents a message sent between users
@@ -21,6 +27,7 @@ import os
 import json
 from typing import cast
 from sqlalchemy import (
+    Float,
     create_engine,
     text,
     inspect,
@@ -55,6 +62,7 @@ class User(Base):
 
         level: Level (for progression)
         rank: Rank (for matchmaking)
+        money: In-game currency balance
 
         is_connected: Connection status (1=connected, 0=offline)
         in_game: Game status (1=in game, 0=not in game)
@@ -73,6 +81,7 @@ class User(Base):
         CheckConstraint("in_game IN (0, 1)", name="ck_users_in_game_bool"),
         CheckConstraint("level >= 0", name="ck_users_level_non_negative"),
         CheckConstraint("`rank` >= 0", name="ck_users_rank_non_negative"),
+        CheckConstraint("money >= 0", name="ck_users_money_non_negative"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -83,6 +92,7 @@ class User(Base):
 
     level = Column(Integer, default=0)
     rank = Column(Integer, default=0)
+    money = Column(Integer, default=0)
 
     is_connected = Column(Integer, nullable=False, default=0)
     in_game = Column(Integer, nullable=False, default=0)
@@ -117,6 +127,12 @@ class User(Base):
     cards = relationship(
         "CardsCorrespondancy",
         foreign_keys="CardsCorrespondancy.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    loot_boxes = relationship(
+        "UserLootBoxCorrespondancy",
+        foreign_keys="UserLootBoxCorrespondancy.user_id",
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -591,6 +607,9 @@ class Card(Base):
         power_table: Power table identifier for the card (for gameplay)
 
         effect: Effect (effect applied by the card)
+
+        buying_price: The in-game currency cost to buy the card
+        selling_price: The in-game currency value when selling the card
     """
 
     __tablename__ = "cards"
@@ -604,6 +623,8 @@ class Card(Base):
     face_artwork_url = Column(String(255), nullable=True)
     back_artwork_url = Column(String(255), nullable=True)
     effect_id = Column(Integer, ForeignKey("effects.id"), nullable=True)
+    buying_price = Column(Integer, nullable=False, default=0)
+    selling_price = Column(Integer, nullable=False, default=0)
 
     # Relations
     effect = relationship("Effect", foreign_keys=[effect_id], back_populates="cards")
@@ -615,7 +636,7 @@ class Card(Base):
     )
 
     def __repr__(self) -> str:
-        return f"Card(id={self.id}, name={self.name}, description={self.description}, rarity={self.rarity}, power_table={self.power_table}, effect={{{self.effect.__repr__() if self.effect else 'None'}}})"
+        return f"Card(id={self.id}, name={self.name}, description={self.description}, rarity={self.rarity}, power_table={self.power_table}, effect={{{self.effect.__repr__() if self.effect else 'None'}}}, buying_price={self.buying_price}, selling_price={self.selling_price})"
 
 
 class CardsCorrespondancy(Base):
@@ -842,6 +863,140 @@ class Trigger(Base):
         }
 
 
+class LootBox(Base):
+    """
+    SQLAlchemy ORM model for a loot box.
+
+    Attributes:
+        id: Primary key
+        name: Name of the loot box
+        description: Description of the loot box
+        price: The in-game currency cost to buy the loot box
+
+        mandatory_cards: List of cards that are guaranteed to be included in the loot box
+        random_cards: List of cards that can be randomly included in the loot box
+    """
+
+    __tablename__ = "loot_boxes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False)
+    price = Column(Integer, nullable=False, default=0)
+    nbr_random_cards = Column(Integer, nullable=False, default=0)
+
+    # Relations
+    mandatory_cards = relationship(
+        "LootBoxMandatoryCards",
+        foreign_keys="LootBoxMandatoryCards.loot_box_id",
+        back_populates="loot_box",
+        cascade="all, delete-orphan",
+    )
+    random_cards = relationship(
+        "LootBoxRandomCards",
+        foreign_keys="LootBoxRandomCards.loot_box_id",
+        back_populates="loot_box",
+        cascade="all, delete-orphan",
+    )
+
+    correspondances = relationship(
+        "UserLootBoxCorrespondancy",
+        foreign_keys="UserLootBoxCorrespondancy.loot_box_id",
+        back_populates="loot_box",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"LootBox(id={self.id}, name={self.name}, description={self.description}, price={self.price})"
+
+
+class LootBoxMandatoryCards(Base):
+    """
+    SQLAlchemy ORM model for the mandatory cards included in a loot box.
+
+    Attributes:
+        id: Primary key
+        loot_box_id: Foreign key to LootBox (the loot box this card belongs to)
+        card_id: Foreign key to Card (the card that is included in the loot box)
+    """
+
+    __tablename__ = "loot_box_mandatory_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    loot_box_id = Column(Integer, ForeignKey("loot_boxes.id"), nullable=False)
+    card_id = Column(Integer, ForeignKey("cards.id"), nullable=False)
+    quantity = Column(Integer, nullable=False, default=1)
+
+    loot_box = relationship(
+        "LootBox",
+        foreign_keys=[loot_box_id],
+        back_populates="mandatory_cards",
+    )
+    card = relationship("Card", foreign_keys=[card_id])
+
+
+class LootBoxRandomCards(Base):
+    """
+    SQLAlchemy ORM model for the random cards included in a loot box.
+
+    Attributes:
+        id: Primary key
+        loot_box_id: Foreign key to LootBox (the loot box this count belongs to)
+        card_id: Foreign key to Card (the card that is included in the loot box)
+        count: The number of random cards included in the loot box
+        probability: The probability of this card being included in the loot box
+    """
+
+    __tablename__ = "loot_box_random_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    loot_box_id = Column(Integer, ForeignKey("loot_boxes.id"), nullable=False)
+    card_id = Column(Integer, ForeignKey("cards.id"), nullable=False)
+    count = Column(Integer, nullable=False, default=0)
+    probability = Column(Float, nullable=False, default=0.0)
+
+    loot_box = relationship(
+        "LootBox",
+        foreign_keys=[loot_box_id],
+        back_populates="random_cards",
+    )
+    card = relationship("Card", foreign_keys=[card_id])
+
+
+class UserLootBoxCorrespondancy(Base):
+    """
+    SQLAlchemy ORM model for the many-to-many relationship between users and loot boxes.
+
+    Attributes:
+        id: Primary key
+        user_id: Foreign key to User (loot box owner)
+        loot_box_id: Foreign key to LootBox (loot box owned)
+        quantity: Number of copies of the loot box owned by the user
+    """
+
+    __tablename__ = "user_loot_box_correspondancy"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "loot_box_id", name="uq_user_loot_box_correspondancy"
+        ),
+        CheckConstraint(
+            "quantity >= 0", name="ck_user_loot_box_correspondancy_quantity"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    loot_box_id = Column(Integer, ForeignKey("loot_boxes.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="loot_boxes")
+    loot_box = relationship(
+        "LootBox",
+        foreign_keys=[loot_box_id],
+        back_populates="correspondances",
+    )
+
+
 class Achievement(Base):
     """
     SQLAlchemy ORM model for an achievement.
@@ -974,6 +1129,7 @@ class Game(Base):
     player2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     timestamp = Column(DateTime, nullable=False)
 
+    finished = Column(Integer, nullable=False, default=0)
     nbr_rounds_player1 = Column(Integer, nullable=False)
     nbr_rounds_player2 = Column(Integer, nullable=False)
     replay_data = Column(Text, nullable=True)
@@ -986,7 +1142,32 @@ class Game(Base):
     )
 
     def __repr__(self) -> str:
-        return f"Game(id={self.id}, player1_id={self.player1_id}, player2_id={self.player2_id}, timestamp={self.timestamp}, nbr_rounds_player1={self.nbr_rounds_player1}, nbr_rounds_player2={self.nbr_rounds_player2})"
+        return f"Game(id={self.id}, player1_id={self.player1_id}, player2_id={self.player2_id}, timestamp={self.timestamp}, finished={self.finished}, nbr_rounds_player1={self.nbr_rounds_player1}, nbr_rounds_player2={self.nbr_rounds_player2})"
+
+    def finish_game(
+        self, nbr_rounds_player1: int, nbr_rounds_player2: int, replay_data: str | None
+    ) -> None:
+        """
+        Mark the game as finished and set the number of rounds won by each player.
+
+        Args:
+            nbr_rounds_player1: Number of rounds won by player 1
+            nbr_rounds_player2: Number of rounds won by player 2
+            replay_data: Optional string data representing the game replay
+        """
+        self.finished = 1  # type: ignore
+        self.nbr_rounds_player1 = nbr_rounds_player1  # type: ignore
+        self.nbr_rounds_player2 = nbr_rounds_player2  # type: ignore
+        self.replay_data = replay_data
+
+    def is_finished(self) -> bool:
+        """
+        Check if the game has finished.
+
+        Returns:
+            True if the game is finished, False otherwise
+        """
+        return self.finished == 1  # type: ignore
 
     def get_winner(self) -> int:
         """
@@ -995,6 +1176,9 @@ class Game(Base):
         Returns:
             player1_id if player 1 wins, player2_id if player 2 wins, or 0 for a draw
         """
+        if not self.is_finished():
+            raise ValueError("Game is not finished yet")
+
         if self.nbr_rounds_player1 > self.nbr_rounds_player2:  # type: ignore
             return self.player1_id  # type: ignore
         elif self.nbr_rounds_player2 > self.nbr_rounds_player1:  # type: ignore

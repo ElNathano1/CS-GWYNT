@@ -32,7 +32,7 @@ class CardRepository:
         self.session = session
         self._effect_repo = EffectRepository(session)
 
-    # ─────────────────────────── internal helper ────────────────────────────
+    # Internal helper
 
     def _orm_to_dto(self, orm: Card) -> CardDTO:
         """Convert a Card ORM object to a CardDTO."""
@@ -51,7 +51,7 @@ class CardRepository:
             effect=effect_dto,
         )
 
-    # ──────────────────────────── CRUD ──────────────────────────────────────
+    # CRUD
 
     def create(self, dto: CardDTO) -> CardDTO:
         """
@@ -79,6 +79,8 @@ class CardRepository:
             face_artwork_url=dto.face_artwork_url,
             back_artwork_url=dto.back_artwork_url,
             effect_id=effect_id,
+            buying_price=dto.buying_price,
+            selling_price=dto.selling_price,
         )
         self.session.add(orm)
         self.session.commit()
@@ -163,7 +165,8 @@ class CardRepository:
         orm.power_table = dto.power_table  # type: ignore
         orm.face_artwork_url = dto.face_artwork_url  # type: ignore
         orm.back_artwork_url = dto.back_artwork_url  # type: ignore
-
+        orm.buying_price = dto.buying_price  # type: ignore
+        orm.selling_price = dto.selling_price  # type: ignore
         # Attach a new effect if one is provided and none currently exists
         if dto.effect is not None and orm.effect is None:  # type: ignore
             persisted_effect = self._effect_repo.create_effect(dto.effect)

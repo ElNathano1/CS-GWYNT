@@ -116,6 +116,108 @@ curl "http://localhost:8000/users/alice"
 
 ## REST API
 
+### Complete Route Inventory (main.py)
+
+This section is the exhaustive list of routes currently implemented in main.py.
+
+#### Auth
+
+- POST /auth/login
+- GET /auth/verify
+
+#### Presence, Users, Social
+
+- GET /connected
+- GET /free
+- GET /users/{username}
+- GET /users
+- POST /users/
+- POST /users/{username}/change_password
+- POST /users/{username}/reset_password
+- POST /users/{username}/change_name
+- POST /users/{username}/change_profile_picture
+- POST /users/{username}/add_friend
+- POST /users/{username}/accept_friend
+- POST /users/{username}/reject_friend
+- POST /users/{username}/remove_friend
+- POST /users/{username}/update_level
+- POST /users/{username}/update_rank
+- POST /users/{username}/connect
+- POST /users/{username}/disconnect
+- POST /users/{username}/in_game
+- POST /users/{username}/not_in_game
+- DELETE /users/{username}
+- GET /leaderboard
+
+#### Games and Messages
+
+- GET /games/{username}
+- POST /games/
+- GET /messages/{username}
+- POST /messages/{sender_username}
+
+#### Loot Boxes
+
+- GET /loot-boxes
+- GET /loot-boxes/{loot_box_id}
+- POST /loot-boxes
+- DELETE /loot-boxes/{loot_box_id}
+- POST /loot-boxes/{loot_box_id}/mandatory-cards/{card_id}
+- DELETE /loot-boxes/{loot_box_id}/mandatory-cards/{card_id}
+- POST /loot-boxes/{loot_box_id}/random-cards/{card_id}
+- DELETE /loot-boxes/{loot_box_id}/random-cards/{card_id}
+- GET /users/{username}/loot-boxes
+- POST /users/{username}/loot-boxes/{loot_box_id}
+- DELETE /users/{username}/loot-boxes/{loot_box_id}
+- POST /users/{username}/loot-boxes/{loot_box_id}/buy
+- POST /users/{username}/loot-boxes/{loot_box_id}/open
+
+#### Cards
+
+- GET /cards
+- POST /cards
+- DELETE /cards/{card_id}
+- GET /users/{username}/cards
+- POST /users/{username}/cards/{card_id}
+- DELETE /users/{username}/cards/{card_id}
+- POST /users/{username}/cards/{card_id}/buy
+- DELETE /users/{username}/cards/{card_id}/sell
+
+#### Effects and Achievements
+
+- GET /effects
+- GET /effects/by-type/{type_name}
+- POST /effects
+- DELETE /effects/{effect_id}
+- GET /achievements
+- POST /achievements
+- DELETE /achievements/{achievement_id}
+- GET /users/{username}/achievements
+- POST /users/{username}/achievements/{achievement_id}
+- DELETE /users/{username}/achievements/{achievement_id}
+
+#### Upload, Profile Picture, File Manager
+
+- POST /upload/
+- POST /users/{username}/profile-picture
+- GET /users/{username}/profile-picture
+- GET /users/{username}/profile-picture/thumb
+- DELETE /users/{username}/profile-picture
+- DELETE /files/
+- POST /files/move/
+- POST /files/rename/
+- POST /folders/
+- DELETE /folders/
+- POST /files/copy/
+- GET /files/
+- GET /files/info/
+
+### WebSocket Route Inventory (main.py)
+
+- WS /ws/health
+- WS /ws/lobby
+- WS /ws/room/{room_id}
+
 ### 1. Auth
 
 #### `POST /auth/login`

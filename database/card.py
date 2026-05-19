@@ -25,6 +25,8 @@ class CardDTO:
         face_artwork_url (str | None): URL or path for the card's face artwork.
         back_artwork_url (str | None): URL or path for the card's back artwork.
         effect (EffectDTO | None): The associated effect DTO, if any.
+        buying_price (int): The in-game currency cost to buy the card.
+        selling_price (int): The in-game currency value when selling the card.
     """
 
     def __init__(
@@ -37,6 +39,8 @@ class CardDTO:
         face_artwork_url: str | None = None,
         back_artwork_url: str | None = None,
         effect: EffectDTO | None = None,
+        buying_price: int = 0,
+        selling_price: int = 0,
     ):
         self.id = id
         self.name = name
@@ -46,11 +50,11 @@ class CardDTO:
         self.face_artwork_url = face_artwork_url
         self.back_artwork_url = back_artwork_url
         self.effect = effect
+        self.buying_price = buying_price
+        self.selling_price = selling_price
 
     def __repr__(self) -> str:
-        return (
-            f"CardDTO(id={self.id}, name={self.name!r}, rarity={self.rarity!r})"
-        )
+        return f"CardDTO(id={self.id}, name={self.name!r}, rarity={self.rarity!r})"
 
     def to_dict(self) -> dict:
         """Serialise to a JSON-safe dictionary."""
@@ -63,4 +67,6 @@ class CardDTO:
             "face_artwork_url": self.face_artwork_url,
             "back_artwork_url": self.back_artwork_url,
             "effect": self.effect.to_dict() if self.effect else None,
+            "buying_price": self.buying_price,
+            "selling_price": self.selling_price,
         }

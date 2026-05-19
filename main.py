@@ -1,5 +1,5 @@
 """
-CS-GWYNT User Service (Railway branch)
+CS-GWYNT Backend Services (Railway branch)
 
 This FastAPI service provides:
 - Account management APIs (users, friends, levels, connection state)
@@ -41,34 +41,36 @@ from random import random
 import shutil
 import jwt
 from datetime import datetime, timedelta
-from pathlib import Path
 from PIL import Image
 from io import BytesIO
 
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi import WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from database.models import get_session, AchievementsCorrespondancy, User
 from database.repository import AccountRepository
 from database.card_repository import CardRepository
 from database.effect_repository import EffectRepository
 from database.achievement_repository import AchievementRepository
 from database.card import CardDTO
+from database.loot_box import LootBoxDTO
+from database.loot_box_repository import LootBoxRepository
 from database.effect import EffectDTO, TriggerDTO
 from database.achievement import AchievementDTO
 from database.account import Account
-from typing import Any
 import asyncio
 import json
 import uuid
 
-app = FastAPI(title="CS-GWYNT User Service")
+API_NAME = os.environ.get("API_NAME", "CS-GWYNT Backend Services")
+API_VERSION = os.environ.get("API_VERSION", "0.1.0")
+app = FastAPI(title=API_NAME, version=API_VERSION)
 
 # JWT Secret - use environment variable in production
 JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key-change-in-production")
-JWT_ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24
+JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+TOKEN_EXPIRE_HOURS = int(os.environ.get("TOKEN_EXPIRE_HOURS", 24))
 
 
 def generate_token(username: str) -> str:
@@ -137,6 +139,14 @@ def get_achievement_repo():
     session = get_session()
     try:
         yield AchievementRepository(session)
+    finally:
+        session.close()
+
+
+def get_loot_box_repo():
+    session = get_session()
+    try:
+        yield LootBoxRepository(session)
     finally:
         session.close()
 
@@ -214,6 +224,27 @@ class AchievementCreate(BaseModel):
     description: str
     criteria: str
     illustration: str | None = None
+
+
+class LootBoxCreate(BaseModel):
+    name: str
+    description: str
+    price: int
+    nbr_random_cards: int
+    mandatory_cards: list[tuple[int, int]] = Field(default_factory=list)
+    random_cards: list[tuple[int, float]] = Field(default_factory=list)
+
+
+class LootBoxMandatoryCardAction(BaseModel):
+    quantity: int = 1
+
+
+class LootBoxRandomCardAction(BaseModel):
+    probability: float
+
+
+class UserLootBoxAction(BaseModel):
+    quantity: int = 1
 
 
 # === Helper functions for profile pictures ===
@@ -751,6 +782,294 @@ def get_leaderboard(
     ]
 
 
+@app.get("/loot-boxes")
+def get_loot_boxes(
+    search: str | None = None,
+    repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    loot_boxes = repo.search(search) if search else repo.get_all()
+    return [loot_box.to_dict() for loot_box in loot_boxes]
+
+
+@app.get("/loot-boxes/{loot_box_id}")
+def get_loot_box(
+    loot_box_id: int, repo: LootBoxRepository = Depends(get_loot_box_repo)
+):
+    loot_box = repo.get(loot_box_id)
+    if not loot_box:
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    return loot_box.to_dict()
+
+
+@app.post("/loot-boxes")
+def create_loot_box(
+    payload: LootBoxCreate,
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if payload.price < 0:
+        raise HTTPException(status_code=400, detail="Price must be >= 0")
+    if payload.nbr_random_cards < 0:
+        raise HTTPException(status_code=400, detail="nbr_random_cards must be >= 0")
+
+    mandatory_cards: list[tuple[CardDTO, int]] = []
+    for card_id, quantity in payload.mandatory_cards:
+        if quantity < 1:
+            raise HTTPException(
+                status_code=400, detail="Mandatory card quantity must be >= 1"
+            )
+        card = card_repo.get(card_id)
+        if not card:
+            raise HTTPException(status_code=404, detail=f"Card {card_id} not found")
+        mandatory_cards.append((card, quantity))
+
+    random_cards: list[tuple[CardDTO, float]] = []
+    for card_id, probability in payload.random_cards:
+        if probability < 0:
+            raise HTTPException(
+                status_code=400, detail="Random card probability must be >= 0"
+            )
+        card = card_repo.get(card_id)
+        if not card:
+            raise HTTPException(status_code=404, detail=f"Card {card_id} not found")
+        random_cards.append((card, probability))
+
+    created = loot_box_repo.create(
+        LootBoxDTO(
+            name=payload.name,
+            description=payload.description,
+            price=payload.price,
+            nbr_random_cards=payload.nbr_random_cards,
+            mandatory_cards=mandatory_cards,
+            random_cards=random_cards,
+        )
+    )
+    return created.to_dict()
+
+
+@app.delete("/loot-boxes/{loot_box_id}")
+def delete_loot_box(
+    loot_box_id: int,
+    repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    deleted = repo.delete(loot_box_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    return {"status": "success", "loot_box_id": loot_box_id}
+
+
+@app.post("/loot-boxes/{loot_box_id}/mandatory-cards/{card_id}")
+def add_loot_box_mandatory_card(
+    loot_box_id: int,
+    card_id: int,
+    action: LootBoxMandatoryCardAction,
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if action.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    success = loot_box_repo.add_mandatory_card(loot_box_id, card_id, action.quantity)
+    if not success:
+        raise HTTPException(status_code=400, detail="Could not add mandatory card")
+
+    loot_box = loot_box_repo.get(loot_box_id)
+    return loot_box.to_dict() if loot_box else {"status": "success"}
+
+
+@app.delete("/loot-boxes/{loot_box_id}/mandatory-cards/{card_id}")
+def remove_loot_box_mandatory_card(
+    loot_box_id: int,
+    card_id: int,
+    quantity: int = 1,
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    success = loot_box_repo.remove_mandatory_card(loot_box_id, card_id, quantity)
+    if not success:
+        raise HTTPException(
+            status_code=404, detail="Mandatory card not found in loot box"
+        )
+
+    loot_box = loot_box_repo.get(loot_box_id)
+    return loot_box.to_dict() if loot_box else {"status": "success"}
+
+
+@app.post("/loot-boxes/{loot_box_id}/random-cards/{card_id}")
+def add_loot_box_random_card(
+    loot_box_id: int,
+    card_id: int,
+    action: LootBoxRandomCardAction,
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if action.probability < 0:
+        raise HTTPException(status_code=400, detail="Probability must be >= 0")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    success = loot_box_repo.add_random_card(loot_box_id, card_id, action.probability)
+    if not success:
+        raise HTTPException(status_code=400, detail="Could not add random card")
+
+    loot_box = loot_box_repo.get(loot_box_id)
+    return loot_box.to_dict() if loot_box else {"status": "success"}
+
+
+@app.delete("/loot-boxes/{loot_box_id}/random-cards/{card_id}")
+def remove_loot_box_random_card(
+    loot_box_id: int,
+    card_id: int,
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    success = loot_box_repo.remove_random_card(loot_box_id, card_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Random card not found in loot box")
+
+    loot_box = loot_box_repo.get(loot_box_id)
+    return loot_box.to_dict() if loot_box else {"status": "success"}
+
+
+@app.get("/users/{username}/loot-boxes")
+def get_user_loot_boxes(username: str, repo: AccountRepository = Depends(get_repo)):
+    if not repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    loot_boxes = repo.get_user_loot_boxes(username)
+    return [
+        {
+            "loot_box": entry["loot_box"].to_dict(),
+            "quantity": entry["quantity"],
+        }
+        for entry in loot_boxes
+    ]
+
+
+@app.post("/users/{username}/loot-boxes/{loot_box_id}")
+def add_user_loot_box(
+    username: str,
+    loot_box_id: int,
+    action: UserLootBoxAction,
+    account_repo: AccountRepository = Depends(get_repo),
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    if action.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+
+    account_repo.add_loot_box(username, loot_box_id, action.quantity)
+    return {
+        "status": "success",
+        "username": username,
+        "loot_box_id": loot_box_id,
+        "quantity": account_repo.get_loot_box_quantity(username, loot_box_id),
+    }
+
+
+@app.delete("/users/{username}/loot-boxes/{loot_box_id}")
+def remove_user_loot_box(
+    username: str,
+    loot_box_id: int,
+    quantity: int = 1,
+    account_repo: AccountRepository = Depends(get_repo),
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    if quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+
+    try:
+        account_repo.remove_loot_box(username, loot_box_id, quantity)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "status": "success",
+        "username": username,
+        "loot_box_id": loot_box_id,
+        "quantity": account_repo.get_loot_box_quantity(username, loot_box_id),
+    }
+
+
+@app.post("/users/{username}/loot-boxes/{loot_box_id}/buy")
+def buy_user_loot_box(
+    username: str,
+    loot_box_id: int,
+    action: UserLootBoxAction,
+    account_repo: AccountRepository = Depends(get_repo),
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    if action.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+
+    success = account_repo.buy_loot_box(username, loot_box_id, action.quantity)
+    if not success:
+        raise HTTPException(status_code=400, detail="Insufficient funds")
+
+    return {
+        "status": "success",
+        "username": username,
+        "loot_box_id": loot_box_id,
+        "quantity": account_repo.get_loot_box_quantity(username, loot_box_id),
+    }
+
+
+@app.post("/users/{username}/loot-boxes/{loot_box_id}/open")
+def open_user_loot_box(
+    username: str,
+    loot_box_id: int,
+    account_repo: AccountRepository = Depends(get_repo),
+    loot_box_repo: LootBoxRepository = Depends(get_loot_box_repo),
+):
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not loot_box_repo.get(loot_box_id):
+        raise HTTPException(status_code=404, detail="Loot box not found")
+
+    obtained_cards = account_repo.open_loot_box(username, loot_box_id)
+    if not obtained_cards:
+        raise HTTPException(
+            status_code=400,
+            detail="Loot box unavailable or empty for this user",
+        )
+
+    return {
+        "status": "success",
+        "username": username,
+        "loot_box_id": loot_box_id,
+        "remaining_quantity": account_repo.get_loot_box_quantity(username, loot_box_id),
+        "obtained_cards": [card.to_dict() for card in obtained_cards],
+    }
+
+
 @app.get("/cards")
 def get_cards(
     rarity: str | None = None,
@@ -851,6 +1170,63 @@ def remove_user_card(
 
     try:
         account_repo.remove_card(username, card_id, quantity)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "status": "success",
+        "username": username,
+        "card_id": card_id,
+        "quantity": account_repo.get_card_quantity(username, card_id),
+    }
+
+
+@app.post("/users/{username}/cards/{card_id}/buy")
+def buy_user_card(
+    username: str,
+    card_id: int,
+    action: UserCardAction,
+    account_repo: AccountRepository = Depends(get_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if action.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    success = account_repo.buy_card(username, card_id, action.quantity)
+    if not success:
+        raise HTTPException(status_code=400, detail="Insufficient funds")
+
+    return {
+        "status": "success",
+        "username": username,
+        "card_id": card_id,
+        "quantity": account_repo.get_card_quantity(username, card_id),
+    }
+
+
+@app.delete("/users/{username}/cards/{card_id}/sell")
+def sell_user_card(
+    username: str,
+    card_id: int,
+    quantity: int = 1,
+    account_repo: AccountRepository = Depends(get_repo),
+    card_repo: CardRepository = Depends(get_card_repo),
+):
+    if quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be >= 1")
+    if not account_repo.get_by_username(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not card_repo.get(card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    try:
+        success = account_repo.sell_card(username, card_id, quantity)
+        if not success:
+            raise HTTPException(status_code=400, detail="Insufficient cards to sell")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
