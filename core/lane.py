@@ -4,15 +4,17 @@ from enum import Enum
 import random
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
-from .card import Card
-from .effect import Effect
+from typing import List, Dict, Optional, TYPE_CHECKING
 
 import os
 from dotenv import load_dotenv
 import json
 
 load_dotenv()
+
+if TYPE_CHECKING:
+    from .card import Card
+    from .effect import Effect
 
 
 class LaneType(Enum):
@@ -24,12 +26,12 @@ class LaneType(Enum):
 
 
 @dataclass
-class Lane(List[Card]):
+class Lane(List["Card"]):
     """Represents a lane where cards can be placed"""
 
     type: LaneType
     max_len: int = int(os.getenv("LANE_SIZE", 5))
-    effect: Optional[Effect] = None
+    effect: Optional["Effect"] = None
 
     def __post_init__(self):
         if len(self) > self.max_len:
@@ -42,7 +44,7 @@ class Lane(List[Card]):
 
         return sum(card.current_power for card in self)
 
-    def append(self, card: Card) -> None:
+    def append(self, card: "Card") -> None:
         """Add a card to the lane"""
 
         if len(self) >= self.max_len:
@@ -50,10 +52,10 @@ class Lane(List[Card]):
 
         super().append(card)
         card.current_lane = self.type
-        card.current_power = card.power_table.__getattribute__(self.type.value)
+        card.update_current_power()
         self.current_power = self.update_power()
 
-    def remove(self, card: Card) -> None:
+    def remove(self, card: "Card") -> None:
         """Remove a card from the lane"""
 
         try:
@@ -63,12 +65,12 @@ class Lane(List[Card]):
             raise IndexError("Card not in lane")
 
         card.current_lane = None
-        card.current_power = 0
+        card.update_current_power()
         self.current_power = self.update_power()
 
 
 @dataclass
-class Hand(List[Card]):
+class Hand(List["Card"]):
     """Represents a player's hand"""
 
     max_len: int = int(os.getenv("MAX_HAND_SIZE", 10))
@@ -77,7 +79,7 @@ class Hand(List[Card]):
         if len(self) > self.max_len:
             raise ValueError(f"Hand cannot have more than {self.max_len} cards")
 
-    def append(self, card: Card) -> None:
+    def append(self, card: "Card") -> None:
         """Add a card to the hand"""
 
         if len(self) >= self.max_len:
@@ -85,7 +87,7 @@ class Hand(List[Card]):
 
         super().append(card)
 
-    def remove(self, card: Card) -> None:
+    def remove(self, card: "Card") -> None:
         """Remove a card from the hand"""
 
         try:
@@ -96,7 +98,7 @@ class Hand(List[Card]):
 
 
 @dataclass
-class Pile(List[Card]):
+class Pile(List["Card"]):
     """Represents a pile of cards (deck or discard)"""
 
     max_len: int | None = int(os.getenv("MAX_DECK_SIZE", 30))
@@ -110,7 +112,7 @@ class Pile(List[Card]):
 
         return Pile(super(), max_len=self.max_len)  # type: ignore
 
-    def append(self, card: Card) -> None:
+    def append(self, card: "Card") -> None:
         """Add a card to the pile"""
 
         if self.max_len and len(self) >= self.max_len:
@@ -118,7 +120,7 @@ class Pile(List[Card]):
 
         super().append(card)
 
-    def insert(self, card: Card, index: int | None = None) -> None:
+    def insert(self, card: "Card", index: int | None = None) -> None:
         """Insert a card at a specific position in the pile. If index is None, the card will be added to a random position"""
 
         if self.max_len and len(self) >= self.max_len:
@@ -129,7 +131,7 @@ class Pile(List[Card]):
 
         super().insert(index, card)
 
-    def remove(self, card: Card) -> None:
+    def remove(self, card: "Card") -> None:
         """Remove a card from the pile"""
 
         try:
@@ -143,7 +145,7 @@ class Pile(List[Card]):
 
         random.shuffle(self)
 
-    def draw(self) -> Card:
+    def draw(self) -> "Card":
         """Draw a card from the pile"""
 
         try:
@@ -171,11 +173,7 @@ class Pile(List[Card]):
                     "offstage": card.power_table.offstage,  # type: ignore
                     "backstage": card.power_table.backstage,  # type: ignore
                 },
-                "effect": (
-                    card.effect.to_dict()
-                    if card.effect
-                    else None
-                ),
+                "effect": (card.effect.to_dict() if card.effect else None),
             }
             for card in presentation
         ]

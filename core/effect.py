@@ -2,12 +2,14 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from .card import Card
-from .game import Game
-from .player import Player
 from .power import PowerTable
+
+if TYPE_CHECKING:
+    from .card import Card
+    from .game import Game
+    from .player import Player
 
 
 class EffectType(str, Enum):
@@ -81,23 +83,16 @@ class Targets(str, Enum):
     # Single card targets with constraints of position
     ADJACENT = "adjacent"
     RANDOM_ADJACENT = "random_adjacent"
-    CARD_ON_LANE = "lane"
     RANDOM_CARD_ON_LANE = "random_card_on_lane"
-    CARD_ON_RANDOM_LANE = "random_lane"
 
     # Single card targets with constraints of both player and position
-    CARD_ON_ALLY_LANE = "ally_lane"
-    CARD_ON_ENEMY_LANE = "enemy_lane"
     RANDOM_CARD_ON_ALLY_LANE = "random_card_on_ally_lane"
     RANDOM_CARD_ON_ENEMY_LANE = "random_card_on_enemy_lane"
-    CARD_ON_RANDOM_ALLY_LANE = "random_ally_lane"
-    CARD_ON_RANDOM_ENEMY_LANE = "random_enemy_lane"
 
     # Multiple card targets with constraints of both player and position
     ALL_CARDS_ON_OTHER_ALLY_LANES = "all_other_ally_lanes"
     ALL_CARDS_ON_OTHER_ENEMY_LANES = "all_other_enemy_lanes"
     ALL_CARDS_ON_OTHER_LANES = "all_other_lanes"
-    ALL_CARDS_ON_BOARD = "all_board"
 
     # Single card targets with constraints of container
     CARD_IN_HAND = "card_in_hand"
@@ -108,6 +103,8 @@ class Targets(str, Enum):
 
     CARD_IN_DECK = "card_in_deck"
     CARD_IN_ENEMY_DECK = "card_in_enemy_deck"
+    NEXT_CARD_IN_DECK = "next_card_in_deck"
+    NEXT_CARD_IN_ENEMY_DECK = "next_card_in_enemy_deck"
     RANDOM_CARD_IN_DECK = "random_card_in_deck"
     RANDOM_CARD_IN_ENEMY_DECK = "random_card_in_enemy_deck"
     RANDOM_CARD_IN_DECKS = "random_card_in_decks"
@@ -129,14 +126,6 @@ class Targets(str, Enum):
     ENEMY_LANE = "enemy_lane"
     RANDOM_ALLY_LANE = "random_ally_lane"
     RANDOM_ENEMY_LANE = "random_enemy_lane"
-
-    # Multiple position targets with constraints of player
-    ALL_ALLY_LANES = "all_ally_lanes"
-    ALL_ENEMY_LANES = "all_enemy_lanes"
-    ALL_OTHER_ALLY_LANES = "all_other_ally_lanes"
-    ALL_OTHER_ENEMY_LANES = "all_other_enemy_lanes"
-    ALL_OTHER_LANES = "all_other_lanes"
-    ALL_BOARD = "all_board"
 
     # -- CONTAINERS --
 
@@ -166,19 +155,12 @@ CARD_TARGETS = {
     Targets.ALL_CARDS,
     Targets.ADJACENT,
     Targets.RANDOM_ADJACENT,
-    Targets.CARD_ON_LANE,
     Targets.RANDOM_CARD_ON_LANE,
-    Targets.CARD_ON_RANDOM_LANE,
-    Targets.CARD_ON_ALLY_LANE,
-    Targets.CARD_ON_ENEMY_LANE,
     Targets.RANDOM_CARD_ON_ALLY_LANE,
     Targets.RANDOM_CARD_ON_ENEMY_LANE,
-    Targets.CARD_ON_RANDOM_ALLY_LANE,
-    Targets.CARD_ON_RANDOM_ENEMY_LANE,
     Targets.ALL_CARDS_ON_OTHER_ALLY_LANES,
     Targets.ALL_CARDS_ON_OTHER_ENEMY_LANES,
     Targets.ALL_CARDS_ON_OTHER_LANES,
-    Targets.ALL_CARDS_ON_BOARD,
     Targets.CARD_IN_HAND,
     Targets.CARD_IN_ENEMY_HAND,
     Targets.RANDOM_CARD_IN_HAND,
@@ -186,6 +168,8 @@ CARD_TARGETS = {
     Targets.RANDOM_CARD_IN_HANDS,
     Targets.CARD_IN_DECK,
     Targets.CARD_IN_ENEMY_DECK,
+    Targets.NEXT_CARD_IN_DECK,
+    Targets.NEXT_CARD_IN_ENEMY_DECK,
     Targets.RANDOM_CARD_IN_DECK,
     Targets.RANDOM_CARD_IN_ENEMY_DECK,
     Targets.RANDOM_CARD_IN_DECKS,
@@ -203,12 +187,6 @@ POSITION_TARGETS = {
     Targets.ENEMY_LANE,
     Targets.RANDOM_ALLY_LANE,
     Targets.RANDOM_ENEMY_LANE,
-    Targets.ALL_ALLY_LANES,
-    Targets.ALL_ENEMY_LANES,
-    Targets.ALL_OTHER_ALLY_LANES,
-    Targets.ALL_OTHER_ENEMY_LANES,
-    Targets.ALL_OTHER_LANES,
-    Targets.ALL_BOARD,
 }
 
 CONTAINER_TARGETS = {
@@ -778,8 +756,6 @@ class Effect:
                 raise ValueError("Value must be provided for power effects")
             if isinstance(self.target, (MoveTarget, SwapTarget, CopyTarget)):
                 raise ValueError("Power effects require a single target")
-            if self.target.target_type != TargetType.CARD:
-                raise ValueError("Power effects must target cards")
 
         elif self.effect_type in {
             EffectType.DESTROY,

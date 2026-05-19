@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+BASE_URL = os.getenv("BASE_URL", "https://cs-gwynt-production.up.railway.app")
+
 
 class Settings:
     """Application settings"""

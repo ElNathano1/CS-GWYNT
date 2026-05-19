@@ -51,7 +51,7 @@ class Player:
         except Exception as e:
             raise e
 
-    def play_card(self, card: Card, lane: LaneType) -> None:
+    def play_character_card(self, card: Card, lane: LaneType) -> None:
         """Play a card from the hand"""
 
         try:
@@ -63,8 +63,26 @@ class Player:
         except Exception as e:
             raise e
 
+    def play_event_card(self, card: Card) -> None:
+        """Play an event card from the hand"""
+
+        try:
+            self.hand.remove(card)
+
+            self.update_power()
+
+        except Exception as e:
+            raise e
+
     def discard_card(self, card: Card) -> None:
         """Discard a card from the hand, deck or board"""
+
+        self.destroy_card(card)
+
+        self.discard_pile.append(card)
+
+    def destroy_card(self, card: Card) -> None:
+        """Destroy a card from the hand, deck or board (removed from game)"""
 
         try:
             self.hand.remove(card)
@@ -85,5 +103,3 @@ class Player:
 
                 else:
                     raise Exception("Card not found in hand, deck or board")
-
-        self.discard_pile.append(card)

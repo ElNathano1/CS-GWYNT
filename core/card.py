@@ -46,6 +46,8 @@ class Card:
         if isinstance(self.power_table, Tuple):
             self.power_table = PowerTable(*self.power_table)
 
+        self.original_power_table = self.power_table
+
         if not all(
             isinstance(x, int) and x >= 0
             for x in [
@@ -56,7 +58,7 @@ class Card:
         ):
             raise ValueError("Power values must be non-negative integers")
 
-        self.current_power = self.power_table.__getattribute__(self.current_lane.value) if self.current_lane else 0  # type: ignore
+        self.update_current_power()
 
         self.budget = RARITY_BUDGET.get(self.rarity.value, 0)
 
@@ -64,3 +66,11 @@ class Card:
             raise ValueError(
                 f"Card cost {cost_function(self)} exceeds budget of {self.budget} for rarity {self.rarity.value}"
             )
+
+    def update_current_power(self) -> None:
+        """Update the current power of the card based on its lane"""
+
+        if self.current_lane:
+            self.current_power = self.power_table.__getattribute__(self.current_lane.value)  # type: ignore
+        else:
+            self.current_power = 0
